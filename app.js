@@ -27,9 +27,91 @@ const $  = (id) => document.getElementById(id);
 const on = (el, ev, fn) => el && el.addEventListener(ev, fn);
 
 const SCREENS = ['loading', 'home', 'create', 'share', 'spot', 'play', 'result'];
-function show(name) {
+let currentScreen = 'home';
+let screenStack = ['home'];
+let restoringHistory = false;
+
+function show(name, { push = true } = {}) {
+  if (push && !restoringHistory && currentScreen !== name) {
+    const stack = Array.isArray(history.state?.spottedStack)
+      ? [...history.state.spottedStack, name]
+      : [...screenStack, name];
+    history.pushState(
+      { ...history.state, spotted: true, spottedScreen: name, spottedStack: stack },
+      '',
+      location.href
+    );
+    screenStack = stack;
+  }
+
+  currentScreen = name;
   SCREENS.forEach((s) => $('screen-' + s).classList.toggle('hidden', s !== name));
   window.scrollTo(0, 0);
+}
+
+function initAppHistory() {
+  const state = history.state && typeof history.state === 'object' ? history.state : {};
+  screenStack = ['home'];
+  currentScreen = 'home';
+  history.replaceState(
+    { ...state, spotted: true, spottedScreen: 'home', spottedStack: screenStack },
+    '',
+    location.href
+  );
+}
+
+function renderHome() {
+  closePlayerNameEditor();
+  renderPlayerIdentity();
+  renderOpenGames();
+  renderMine();
+  renderPlayed();
+  show('home', { push: false });
+}
+
+function navigateBackTo(name) {
+  const index = screenStack.lastIndexOf(name);
+  if (history.state?.spotted && index >= 0 && index < screenStack.length - 1) {
+    history.go(index - screenStack.length + 1);
+    return;
+  }
+  show(name);
+}
+
+function restoreHistoryScreen(state) {
+  persistGameProgress();
+  const name = state.spottedScreen || 'home';
+  screenStack = Array.isArray(state.spottedStack) ? state.spottedStack : ['home'];
+  currentScreen = name;
+  restoringHistory = true;
+
+  if (name === 'home') {
+    if (location.hash || SHORT_CODE.test(location.pathname)) {
+      history.replaceState(
+        { ...state, spotted: true, spottedScreen: 'home', spottedStack: ['home'] },
+        '',
+        '/'
+      );
+      screenStack = ['home'];
+    }
+    renderHome();
+  } else if (name === 'play' && (!game || game.over)) {
+    history.replaceState(
+      { ...state, spotted: true, spottedScreen: 'home', spottedStack: ['home'] },
+      '',
+      '/'
+    );
+    screenStack = ['home'];
+    renderHome();
+  } else {
+    if (name === 'play' && game) {
+      renderGrid();
+      renderScore(false);
+    }
+    show(name, { push: false });
+  }
+
+  restoringHistory = false;
 }
 
 let toastTimer;
@@ -158,6 +240,119 @@ function savePlayed(entry) {
   catch { /* private browsing */ }
 }
 
+/* Mid-game progress is device-only. Keep the revealed clue keys and wrong
+   guesses, so closing the app or reopening the link does not reset the game. */
+const PROGRESS_KEY = 'spotted.progress.v1';
+
+function loadProgressStore() {
+  try {
+    const value = JSON.parse(localStorage.getItem(PROGRESS_KEY));
+    return value && typeof value === 'object' ? value : {};
+  } catch { return {}; }
+}
+
+function loadGameProgress(key) {
+  if (!key) return null;
+  const saved = loadProgressStore()[key];
+  if (!saved || typeof saved !== 'object') return null;
+
+  const allowed = new Set(CLUES.map((clue) => clue.key));
+  const revealed = Array.isArray(saved.revealed)
+    ? [...new Set(saved.revealed.filter((clue) => allowed.has(clue)))]
+    : [];
+  const wrong = Math.max(0, Math.min(MAX_WRONG, Number(saved.wrong) | 0));
+  return { revealed, wrong };
+}
+
+function persistGameProgress() {
+  if (!game || game.preview || game.over || !game.progressKey) return;
+
+  const store = loadProgressStore();
+  store[game.progressKey] = {
+    revealed: [...game.revealed],
+    wrong: game.wrong,
+    url: game.progressUrl,
+    at: Date.now(),
+  };
+
+  const recent = Object.entries(store)
+    .sort(([, a], [, b]) => (b.at || 0) - (a.at || 0))
+    .slice(0, 24);
+  try { localStorage.setItem(PROGRESS_KEY, JSON.stringify(Object.fromEntries(recent))); }
+  catch { /* private browsing */ }
+}
+
+function clearGameProgress(key) {
+  if (!key) return;
+  const store = loadProgressStore();
+  delete store[key];
+  try { localStorage.setItem(PROGRESS_KEY, JSON.stringify(store)); }
+  catch { /* private browsing */ }
+}
+
+function progressUrl(key, progress) {
+  if (progress.url) return progress.url;
+  if (key.startsWith('code:')) return `${location.origin}/${key.slice(5)}`;
+  if (key.startsWith('link:')) return key.slice(5);
+  return '';
+}
+
+function renderOpenGames() {
+  const wrap = $('home-open');
+  const list = $('open-list');
+  if (!wrap || !list) return;
+
+  const played = loadPlayed();
+  const open = Object.entries(loadProgressStore())
+    .map(([key, progress]) => ({ ...progress, key, url: progressUrl(key, progress) }))
+    .filter((entry) => {
+      if (!entry.url || !entry.at) return false;
+      const code = codeFromUrl(entry.url);
+      return !(code
+        ? played.some((item) => codeForEntry(item) === code)
+        : played.some((item) => item.key === entry.url));
+    })
+    .sort((a, b) => (b.at || 0) - (a.at || 0));
+
+  wrap.classList.toggle('hidden', open.length === 0);
+  list.innerHTML = '';
+
+  open.forEach((entry) => {
+    const li = document.createElement('li');
+    li.className = 'recent-item recent-item-link';
+    li.tabIndex = 0;
+    li.setAttribute('role', 'button');
+
+    const text = document.createElement('div');
+    text.className = 'recent-text';
+
+    const label = document.createElement('span');
+    label.className = 'recent-name';
+    label.textContent = 'Game in progress';
+
+    const detail = document.createElement('span');
+    detail.className = 'recent-date';
+    detail.textContent = `${whenLabel(entry.at)} · Continue`;
+
+    text.append(label, detail);
+
+    const openButton = document.createElement('button');
+    openButton.className = 'recent-copy';
+    openButton.type = 'button';
+    openButton.textContent = 'Open';
+
+    const openGame = () => { location.href = entry.url; };
+    on(openButton, 'click', (e) => { e.stopPropagation(); openGame(); });
+    on(li, 'click', openGame);
+    on(li, 'keydown', (e) => {
+      if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openGame(); }
+    });
+
+    li.append(text, openButton);
+    list.append(li);
+  });
+}
+
 function renderPlayed() {
   const played = loadPlayed();
   const wrap = $('home-played');
@@ -183,6 +378,7 @@ function renderPlayed() {
       bits.push(`${entry.clues} clue${entry.clues === 1 ? '' : 's'}`);
       if (entry.wrong) bits.push(`${entry.wrong} wrong`);
     }
+    bits.push('Leaderboard');
     detail.textContent = bits.join(' · ');
 
     text.append(name, detail);
@@ -193,14 +389,13 @@ function renderPlayed() {
 
     li.append(text, score);
 
-    if (entry.url) {
-      li.classList.add('recent-item-link');
-      li.tabIndex = 0;
-      li.setAttribute('role', 'link');
-      const go = () => { location.href = entry.url; };
-      on(li, 'click', go);
-      on(li, 'keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); go(); } });
-    }
+    li.classList.add('recent-item-link');
+    li.tabIndex = 0;
+    li.setAttribute('role', 'button');
+    on(li, 'click', () => showPlayedBoard(entry));
+    on(li, 'keydown', (e) => {
+      if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); showPlayedBoard(entry); }
+    });
 
     list.append(li);
   });
@@ -240,7 +435,7 @@ function renderMine() {
 
     const date = document.createElement('span');
     date.className = 'recent-date';
-    date.textContent = whenLabel(entry.at);
+    date.textContent = `${whenLabel(entry.at)} · Leaderboard`;
 
     const copy = document.createElement('button');
     copy.className = 'recent-copy';
@@ -308,7 +503,7 @@ async function copyText(text, okMsg) {
 
 /* ── leaderboard ──────────────────────────────────────
    No accounts. The browser mints a random id once and remembers your
-   display name, which is enough to tell friends apart on a board. */
+   anonymous board handle, which is enough to tell friends apart on a board. */
 
 const PLAYER_KEY = 'spotted.player.v1';
 const NAME_KEY   = 'spotted.name.v1';
@@ -327,6 +522,26 @@ function playerId() {
 
 const savedName = () => { try { return localStorage.getItem(NAME_KEY) || ''; } catch { return ''; } };
 const rememberName = (n) => { try { localStorage.setItem(NAME_KEY, n); } catch { /* ok */ } };
+const forgetName = () => { try { localStorage.removeItem(NAME_KEY); } catch { /* ok */ } };
+
+/* New players do not need to fill in a name before their score is recorded.
+   Keep an old saved name if one exists, otherwise use a stable anonymous
+   handle derived from the browser's player id. */
+function playerName() {
+  const oldName = savedName().trim();
+  if (oldName) return oldName.slice(0, 24);
+  return `Player ${playerId().slice(0, 4).toUpperCase()}`;
+}
+
+function renderPlayerIdentity() {
+  $('player-name').textContent = playerName();
+  $('player-name-input').value = savedName();
+}
+
+function closePlayerNameEditor() {
+  $('player-name-form').classList.add('hidden');
+  $('player-name-edit').classList.remove('hidden');
+}
 
 // A short link's code is its last path segment. Inline #p= links predate
 // codes entirely, so they have no board to show.
@@ -336,13 +551,80 @@ function codeFromUrl(url) {
   return m ? m[1] : '';
 }
 
+function codeForEntry(entry) {
+  return entry.code || codeFromUrl(entry.url);
+}
+
+function findMineEntry(code, url) {
+  return loadMine().find((entry) => code
+    ? codeForEntry(entry) === code
+    : entry.url === url);
+}
+
+function isCreatorFor(puzzle, code, url) {
+  return Boolean(puzzle && puzzle.createdBy === playerId()) || Boolean(findMineEntry(code, url));
+}
+
+function removePlayedEntry(code, url) {
+  const played = loadPlayed();
+  const remaining = played.filter((entry) => !(code
+    ? codeForEntry(entry) === code
+    : entry.key === url));
+  if (remaining.length === played.length) return;
+  try { localStorage.setItem(PLAYED_KEY, JSON.stringify(remaining)); }
+  catch { /* private browsing */ }
+}
+
+function boardUrl(code) {
+  return `/api/score?c=${encodeURIComponent(code)}&v=${Date.now()}`;
+}
+
+async function renameBoardEntry(code, name) {
+  const res = await fetch('/api/score', {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ code, player: playerId(), name }),
+  });
+  if (!res.ok) throw new Error('rename ' + res.status);
+  return res.json();
+}
+
+async function renamePreviousBoards(name) {
+  const codes = [...new Set(loadPlayed().map(codeForEntry).filter(Boolean))];
+  if (!codes.length) return { total: 0, failed: 0 };
+
+  const results = await Promise.all(codes.map(async (code) => {
+    try {
+      await renameBoardEntry(code, name);
+      return true;
+    } catch (e) {
+      console.warn('could not rename leaderboard entry:', e);
+      return false;
+    }
+  }));
+
+  return {
+    total: codes.length,
+    failed: results.filter((ok) => !ok).length,
+  };
+}
+
+function findPlayedEntry(code, url) {
+  return loadPlayed().find((entry) => code
+    ? codeForEntry(entry) === code
+    : entry.key === url);
+}
+
 function renderBoard(board, list) {
   const me = playerId();
   list.innerHTML = '';
 
   board.forEach((entry, i) => {
     const li = document.createElement('li');
-    li.className = 'board-row' + (entry.player === me ? ' you' : '');
+    const active = entry.status === 'started';
+    li.className = 'board-row'
+      + (entry.player === me ? ' you' : '')
+      + (active ? ' active' : '');
 
     const rank = document.createElement('span');
     rank.className = 'board-rank';
@@ -357,51 +639,118 @@ function renderBoard(board, list) {
 
     const detail = document.createElement('span');
     detail.className = 'board-detail';
-    detail.textContent = entry.won
+    detail.textContent = active
+      ? 'Started playing'
+      : entry.won
       ? `${entry.clues} clue${entry.clues === 1 ? '' : 's'}, ${entry.wrong} wrong`
       : 'Did not get it';
 
     who.append(name, detail);
 
     const score = document.createElement('span');
-    score.className = 'board-score';
-    score.textContent = entry.score;
+    score.className = 'board-score' + (active ? ' board-score-active' : '');
+    score.textContent = active ? '…' : entry.score;
 
     li.append(rank, who, score);
     list.append(li);
   });
 }
 
-/* The board for one of your own spots, opened from the home screen.
-   You made it, so you already know who it is — the name is shown. */
+/* Boards can be opened from either side of the game: your own spots or
+   games you have already guessed. */
 let openSpot = null;
 
-async function showSpotBoard(entry) {
-  openSpot = entry;
-  const code = codeFromUrl(entry.url);
+/* Puzzles never change once written, so one fetch per code per session is
+   plenty. Used to put the reveal photo on the board screen. */
+const puzzleCache = new Map();
+
+async function fetchPuzzle(code) {
+  if (puzzleCache.has(code)) return puzzleCache.get(code);
+
+  const res = await fetch('/api/spot?c=' + encodeURIComponent(code));
+  if (!res.ok) throw new Error('puzzle ' + res.status);
+
+  const { puzzle } = await res.json();
+  puzzleCache.set(code, puzzle);
+  return puzzle;
+}
+
+function setSpotPhoto(b64) {
+  const img = $('spot-photo');
+  img.classList.toggle('hidden', !b64);
+  if (b64) img.src = toDataUri(b64);
+  else img.removeAttribute('src');
+}
+
+/* Both sides of this screen have already seen the answer — the creator
+   made the spot, and a guess is only recorded once the game is over — so
+   showing the photo here spoils nothing. */
+async function loadSpotPhoto(code) {
+  try {
+    const puzzle = await fetchPuzzle(code);
+    // The board may have been closed, or a different one opened, while
+    // this was in flight.
+    if (!openSpot || codeForEntry(openSpot) !== code) return;
+    if (puzzle && puzzle.img) setSpotPhoto(puzzle.img);
+  } catch (e) {
+    console.warn('could not load the reveal photo:', e);   // a nicety, not a failure
+  }
+}
+
+async function showEntryBoard(entry, kind) {
+  openSpot = { ...entry, boardKind: kind };
+  const code = codeForEntry(entry);
 
   $('spot-name').textContent = entry.name;
-  $('spot-when').textContent = `Spotted ${whenLabel(entry.at).toLowerCase()}`;
+  $('spot-when').textContent = kind === 'played'
+    ? (entry.won
+      ? `Your score: ${entry.score} points · Guessed ${whenLabel(entry.at).toLowerCase()}`
+      : `You ran out of guesses · ${whenLabel(entry.at)}`)
+    : `Spotted ${whenLabel(entry.at).toLowerCase()}`;
   $('spot-list').innerHTML = '';
   $('spot-note').classList.add('hidden');
+  setSpotPhoto('');                       // clear the previous spot's photo
+  $('spot-share').classList.toggle('hidden', !entry.url);
+  $('spot-play').classList.toggle('hidden', kind === 'mine' || !entry.url);
+  $('spot-play').textContent = 'Play again';
   show('spot');
 
   if (!code) {
     $('spot-note').textContent =
-      'This one was made before short links, so it has no leaderboard. '
-      + 'New spots you create will have one.';
+      'This game used an older link, so it has no shared leaderboard. '
+      + 'New spots and guesses will have one.';
     $('spot-note').classList.remove('hidden');
     return;
   }
 
+  loadSpotPhoto(code);          // in parallel with the board; not awaited
+
   $('spot-spinner').classList.remove('hidden');
   try {
-    const res = await fetch('/api/score?c=' + encodeURIComponent(code));
-    if (!res.ok) throw new Error('board ' + res.status);
-    const { board } = await res.json();
+    let board = await fetchBoard(code);
+    let nameUpdateFailed = false;
 
-    renderBoard(board || [], $('spot-list'));
-    if (!board || !board.length) {
+    // If this is a previous guess and the saved leaderboard row still has an
+    // older name, repair that row as the board is opened and read it back.
+    if (kind === 'played') {
+      const me = board.find((item) => item.player === playerId());
+      const name = playerName();
+      if (me && me.name !== name) {
+        try {
+          await renameBoardEntry(code, name);
+          board = await fetchBoard(code);
+        } catch (e) {
+          console.warn('could not update this leaderboard name:', e);
+          nameUpdateFailed = true;
+        }
+      }
+    }
+
+    renderBoard(board, $('spot-list'));
+    if (nameUpdateFailed) {
+      $('spot-note').textContent = 'Your name is saved, but this board could not update yet.';
+      $('spot-note').classList.remove('hidden');
+    } else if (!board.length) {
       $('spot-note').textContent = 'Nobody has played this one yet. Send them the link.';
       $('spot-note').classList.remove('hidden');
     }
@@ -413,13 +762,26 @@ async function showSpotBoard(entry) {
   $('spot-spinner').classList.add('hidden');
 }
 
+function showSpotBoard(entry) {
+  return showEntryBoard(entry, 'mine');
+}
+
+function showPlayedBoard(entry) {
+  return showEntryBoard(entry, 'played');
+}
+
+async function fetchBoard(code) {
+  const res = await fetch(boardUrl(code), { cache: 'no-store' });
+  if (!res.ok) throw new Error('board ' + res.status);
+  const { board } = await res.json();
+  return board || [];
+}
+
 async function loadBoard(code) {
   try {
-    const res = await fetch('/api/score?c=' + encodeURIComponent(code));
-    if (!res.ok) throw new Error('board ' + res.status);
-    const { board } = await res.json();
-    renderBoard(board || [], $('board-list'));
-    return board || [];
+    const board = await fetchBoard(code);
+    renderBoard(board, $('board-list'));
+    return board;
   } catch (e) {
     console.warn('leaderboard unavailable:', e);
     $('board-note').textContent = 'Leaderboard unavailable right now.';
@@ -429,19 +791,16 @@ async function loadBoard(code) {
 }
 
 async function submitScore(code) {
-  const name = $('board-name').value.trim();
-  if (!name) { $('board-name').focus(); return; }
-  rememberName(name);
-
-  const btn = $('board-submit');
-  btn.disabled = true;
-  btn.textContent = 'Adding…';
+  const name = playerName();
+  $('board-note').textContent = `Adding your score as ${name}…`;
+  $('board-note').classList.remove('hidden');
 
   try {
     const res = await fetch('/api/score', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
+        phase: 'finish',
         code,
         player: playerId(),
         name,
@@ -453,24 +812,40 @@ async function submitScore(code) {
     if (!res.ok) throw new Error('submit ' + res.status);
 
     const { board, recorded } = await res.json();
-    $('board-join').classList.add('hidden');
     $('board-note').textContent = recorded
-      ? 'Your score is on the board. Only your first go counts.'
-      : 'You were already on this board — your first score stands.';
+      ? `Added automatically as ${name}. Only your first go counts.`
+      : `You are already on this board as ${name} — your first score stands.`;
     $('board-note').classList.remove('hidden');
     renderBoard(board || [], $('board-list'));
   } catch (e) {
     console.warn('could not submit score:', e);
-    toast('Could not add your score');
+    $('board-note').textContent = 'Could not add your score automatically. Try again in a moment.';
+    $('board-note').classList.remove('hidden');
   }
+}
 
-  btn.disabled = false;
-  btn.textContent = 'Add my score';
+async function registerGameStart(code) {
+  try {
+    const res = await fetch('/api/score', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        phase: 'start',
+        code,
+        player: playerId(),
+        name: playerName(),
+      }),
+    });
+    if (!res.ok) throw new Error('start ' + res.status);
+  } catch (e) {
+    // A failed presence ping should never block the game itself.
+    console.warn('could not register game start:', e);
+  }
 }
 
 /* Shown only for short-link spots — an inline #p= link has no code to
-   group scores under. Previewing your own spot shows the board but no
-   way to join it. */
+   group scores under. Previewing your own spot shows the board without
+   recording another score. */
 async function setupBoard() {
   const box = $('board');
   const code = game.code;
@@ -479,13 +854,10 @@ async function setupBoard() {
   box.classList.remove('hidden');
 
   $('board-note').classList.add('hidden');
-  $('board-join').classList.toggle('hidden', game.preview);
-  $('board-name').value = savedName();
 
   const board = await loadBoard(code);
-  if (!board) return;
-
   if (game.preview) {
+    if (!board) return;
     $('board-note').textContent = board.length
       ? 'How your friends are doing.'
       : 'Nobody has played this one yet.';
@@ -493,12 +865,18 @@ async function setupBoard() {
     return;
   }
 
-  // Already played from this device? Then the form is pointless.
-  if (board.some((e) => e.player === playerId())) {
-    $('board-join').classList.add('hidden');
-    $('board-note').textContent = 'You are on this board — only your first go counts.';
+  // Do not post again if this browser has already been recorded. The API
+  // also rejects duplicate first attempts, but avoiding the POST keeps the
+  // revisited page read-only as well.
+  const mine = board && board.find((entry) => entry.player === playerId());
+  if (mine && mine.status !== 'started') {
+    $('board-note').textContent = 'Your score is already on this board — only your first go counts.';
     $('board-note').classList.remove('hidden');
+    return;
   }
+
+  // Record the result as soon as the game ends. There is no join form.
+  await submitScore(code);
 }
 
 /* ── photo ────────────────────────────────────────────
@@ -758,6 +1136,7 @@ function initCreate() {
 
     const puzzle = {
       v: 1,
+      createdBy: playerId(),
       name: $('f-name').value.trim(),
       aliases: $('f-aliases').value.split(',').map((s) => s.trim()).filter(Boolean),
       by: $('f-by').value.trim(),
@@ -838,7 +1217,19 @@ let game = null;
 // returns you to your link rather than dumping you on the home screen.
 function startGame(puzzle, opts = {}) {
   const { preview = false, code = '' } = opts;
-  game = { puzzle, revealed: new Set(), wrong: 0, over: false, won: false, preview, code };
+  const progressKey = preview ? '' : (code ? `code:${code}` : `link:${location.href}`);
+  const progress = loadGameProgress(progressKey);
+  game = {
+    puzzle,
+    revealed: new Set(progress ? progress.revealed : []),
+    wrong: progress ? progress.wrong : 0,
+    over: false,
+    won: false,
+    preview,
+    code,
+    progressKey,
+    progressUrl: preview ? '' : location.href,
+  };
 
   $('play-back').title = preview ? 'Back to your link' : 'Back';
   $('result-toshare').classList.toggle('hidden', !preview);
@@ -856,6 +1247,14 @@ function startGame(puzzle, opts = {}) {
   renderGrid();
   renderScore(false);
   show('play');
+
+  if (!preview) persistGameProgress();
+
+  if (!preview && code) registerGameStart(code);
+
+  if (!preview && game.wrong >= MAX_WRONG) {
+    finish(false, `That was your last of ${MAX_WRONG} guesses.`);
+  }
 }
 
 function currentScore() {
@@ -893,6 +1292,7 @@ function renderGrid() {
         game.revealed.add(clue.key);
         fillCard(btn, clue, true);     // only this card flips
         renderScore(true);
+        persistGameProgress();
       });
     }
 
@@ -969,6 +1369,7 @@ function submitGuess() {
   }
 
   game.wrong += 1;
+  persistGameProgress();
   const left = MAX_WRONG - game.wrong;
 
   fb.className = 'feedback ' + (verdict === 'close' ? 'close' : 'miss');
@@ -990,6 +1391,7 @@ function submitGuess() {
 /* ── result ──────────────────────────────────────────── */
 
 function finish(won, note) {
+  if (!game || game.over) return;
   game.over = true;
   game.won = won;
   const score = won ? currentScore() : 0;
@@ -1050,13 +1452,16 @@ function finish(won, note) {
     savePlayed({
       key: game.code || location.href,
       url: game.code ? location.href : '',
+      code: game.code || '',
       name: game.puzzle.name,
       score,
       won,
       clues: game.revealed.size,
+      revealed: [...game.revealed],
       wrong: game.wrong,
       at: Date.now(),
     });
+    clearGameProgress(game.progressKey);
   }
 
   show('result');
@@ -1074,7 +1479,7 @@ async function routeFromPath() {
   if (!m) return false;
 
   const code = m[1];
-  show('loading');
+  show('loading', { push: false });
 
   try {
     const res = await fetch('/api/spot?c=' + encodeURIComponent(code));
@@ -1083,6 +1488,19 @@ async function routeFromPath() {
 
     const { puzzle } = await res.json();
     if (!puzzle || !puzzle.name || !puzzle.clues) throw new Error('bad payload');
+
+    if (isCreatorFor(puzzle, code, location.href)) {
+      removePlayedEntry(code);
+      const mine = findMineEntry(code) || { name: puzzle.name, at: Date.now(), code };
+      showEntryBoard({ ...mine, url: mine.url || location.href, code }, 'mine');
+      return true;
+    }
+
+    const previous = findPlayedEntry(code);
+    if (previous) {
+      showEntryBoard({ ...previous, url: previous.url || location.href, code }, 'played');
+      return true;
+    }
 
     startGame(puzzle, { code });
     return true;
@@ -1104,6 +1522,20 @@ function routeFromHash() {
     if (!puzzle || !puzzle.name || !puzzle.clues) throw new Error('bad payload');
     const img = /[#&]i=([^&]+)/.exec(location.hash);
     if (img) puzzle.img = img[1];
+
+    if (isCreatorFor(puzzle, '', location.href)) {
+      removePlayedEntry('', location.href);
+      const mine = findMineEntry('', location.href) || { name: puzzle.name, at: Date.now() };
+      showEntryBoard({ ...mine, url: mine.url || location.href, code: '' }, 'mine');
+      return true;
+    }
+
+    const previous = findPlayedEntry('', location.href);
+    if (previous) {
+      showEntryBoard({ ...previous, url: '', code: '' }, 'played');
+      return true;
+    }
+
     startGame(puzzle);
     return true;
   } catch {
@@ -1113,12 +1545,21 @@ function routeFromHash() {
 }
 
 function goHome() {
-  if (location.hash || SHORT_CODE.test(location.pathname)) {
-    history.replaceState(null, '', '/');
+  persistGameProgress();
+  if (history.state?.spotted && screenStack.lastIndexOf('home') < screenStack.length - 1) {
+    navigateBackTo('home');
+    return;
   }
-  renderMine();
-  renderPlayed();
-  show('home');
+
+  if (location.hash || SHORT_CODE.test(location.pathname)) {
+    history.replaceState(
+      { ...history.state, spotted: true, spottedScreen: 'home', spottedStack: ['home'] },
+      '',
+      '/'
+    );
+    screenStack = ['home'];
+  }
+  renderHome();
 }
 
 /* ── the advert ───────────────────────────────────────
@@ -1182,42 +1623,25 @@ if ('serviceWorker' in navigator) {
 
 on($('home-create'),   'click', () => { resetCreate(); show('create'); });
 on($('create-back'),   'click', goHome);
-on($('share-back'),    'click', () => show('create'));
+on($('share-back'),    'click', () => navigateBackTo('create'));
 on($('share-home'),    'click', goHome);
 on($('result-create'), 'click', () => { resetCreate(); show('create'); });
 
 on($('share-copy'), 'click', (e) => share({ url: e.currentTarget.dataset.url, okMsg: 'Link copied' }));
 
-on($('share-play'), 'click', async () => {
+on($('share-play'), 'click', () => {
   const url = $('share-copy').dataset.url || '';
-
-  // Long fallback link: everything needed is already in the URL.
-  const m = /[#&]p=([^&]+)/.exec(url);
-  if (m) {
-    const puzzle = decode(m[1]);
-    const img = /[#&]i=([^&]+)/.exec(url);
-    if (img) puzzle.img = img[1];
-    startGame(puzzle, { preview: true });
-    return;
-  }
-
-  // Short link: fetch it back, so the preview is exactly what they'll get.
-  const code = (url.split('/').pop() || '').trim();
-  if (!code) return;
-  try {
-    const res = await fetch('/api/spot?c=' + encodeURIComponent(code));
-    const { puzzle } = await res.json();
-    startGame(puzzle, { preview: true, code });
-  } catch {
-    toast('Could not load the preview');
-  }
+  const code = codeFromUrl(url);
+  const mine = findMineEntry(code, url);
+  if (mine) showEntryBoard({ ...mine, url, code }, 'mine');
 });
 
 on($('play-guess'),  'click', submitGuess);
 on($('play-back'),   'click', () => {
-  if (game && game.preview) show('share'); else goHome();
+  if (game && game.preview) navigateBackTo('share'); else goHome();
 });
-on($('result-toshare'), 'click', () => show('share'));
+on($('result-toshare'), 'click', () => navigateBackTo('share'));
+on($('result-home'), 'click', goHome);
 on($('play-input'),  'keydown', (e) => { if (e.key === 'Enter') submitGuess(); });
 on($('play-giveup'), 'click', () => {
   if (confirm('Give up and see who it was?')) finish(false);
@@ -1230,30 +1654,84 @@ on($('result-share'), 'click', (e) => share({
 }));
 
 window.addEventListener('hashchange', () => { if (!routeFromHash()) goHome(); });
+window.addEventListener('popstate', (e) => {
+  if (e.state?.spotted) restoreHistoryScreen(e.state);
+});
 
 on($('loading-home'), 'click', goHome);
 on($('spot-back'),  'click', goHome);
+on($('spot-home'),  'click', goHome);
 on($('spot-share'), 'click', () => {
   if (openSpot) share({ url: openSpot.url, okMsg: 'Link copied' });
 });
 on($('spot-play'), 'click', () => {
-  if (!openSpot) return;
+  if (!openSpot || openSpot.boardKind === 'mine') return;
   $('share-copy').dataset.url = openSpot.url;
   $('share-url').textContent = openSpot.url;
-  $('share-play').click();
-});
-on($('board-join'), 'submit', (e) => { e.preventDefault(); submitScore(game.code); });
 
+  // A previous player can inspect a game again without creating another
+  // scored attempt. The creator never sees this button.
+  const m = /[#&]p=([^&]+)/.exec(openSpot.url || '');
+  if (m) {
+    const puzzle = decode(m[1]);
+    const img = /[#&]i=([^&]+)/.exec(openSpot.url);
+    if (img) puzzle.img = img[1];
+    startGame(puzzle, { preview: true });
+    return;
+  }
+
+  const code = codeFromUrl(openSpot.url);
+  if (!code) return;
+  fetch('/api/spot?c=' + encodeURIComponent(code))
+    .then((res) => res.json())
+    .then(({ puzzle }) => startGame(puzzle, { preview: true, code }))
+    .catch(() => toast('Could not load the preview'));
+});
+
+on($('player-name-edit'), 'click', () => {
+  $('player-name-edit').classList.add('hidden');
+  $('player-name-form').classList.remove('hidden');
+  $('player-name-input').value = savedName();
+  $('player-name-input').focus();
+});
+on($('player-name-cancel'), 'click', closePlayerNameEditor);
+on($('player-name-form'), 'submit', async (e) => {
+  e.preventDefault();
+  const name = $('player-name-input').value.trim().slice(0, 24);
+  if (name) rememberName(name); else forgetName();
+  const chosenName = playerName();
+  const save = e.currentTarget.querySelector('button[type="submit"]');
+  save.disabled = true;
+  save.textContent = 'Saving…';
+  renderPlayerIdentity();
+
+  const renamed = await renamePreviousBoards(chosenName);
+
+  save.disabled = false;
+  save.textContent = 'Save';
+  closePlayerNameEditor();
+  if (renamed.failed) {
+    toast('Name saved, but some old boards could not update');
+  } else if (renamed.total) {
+    toast('Name saved and previous boards updated');
+  } else {
+    toast(name ? 'Leaderboard name saved' : 'Using automatic player name');
+  }
+});
+window.addEventListener('pagehide', persistGameProgress);
 /* Three ways in: a short link (/abcde), an old self-contained link
    (#p=...), or the app itself. */
+initAppHistory();
 (async () => {
   if (await routeFromPath()) return;
   if (routeFromHash()) return;
+  renderPlayerIdentity();
+  renderOpenGames();
   renderMine();
   renderPlayed();
   // /?new=1 is the home-screen shortcut — go straight to the create screen.
   if (/[?&]new=1/.test(location.search)) { resetCreate(); show('create'); }
-  else show('home');
+  else show('home', { push: false });
 })();
 
 })();

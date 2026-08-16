@@ -72,9 +72,15 @@ nobody is ever blocked from creating a spot.
 ## Leaderboards, without accounts
 
 Every spot has its own board. Identity is a random id the browser mints once and
-keeps in `localStorage`, plus a display name you type the first time. No sign-up,
-no email, no password. The trade is that clearing site data loses your place,
-which is the right trade for a game played among friends.
+keeps in `localStorage`. Scores are added automatically when a player finishes;
+new players get a stable anonymous name such as `Player 7KQ2`, while an older
+saved display name is kept for compatibility. No sign-up, email, or password is
+needed. The trade is that clearing site data loses your place, which is the right
+trade for a game played among friends.
+
+The current leaderboard name is shown on the home screen and can be changed
+there at any time. Changing it updates the player's previous leaderboard rows
+as well as new entries, while preserving the original first-attempt scores.
 
 Two things make the board mean something:
 
@@ -83,7 +89,8 @@ Two things make the board mean something:
   "100" after burning every clue — the number always matches the story told
   about it.
 - **Only your first attempt counts.** Once you have finished you know the answer,
-  so a replay would trivially score 100. Existing entries are never overwritten.
+  so a replay would trivially score 100. Finished entries are never overwritten;
+  a temporary started row is upgraded only by that same first attempt.
 
 Each score is its own blob at `s/<code>/<player>.json`. That avoids
 read-modify-write on a shared file, so two people finishing at the same moment
@@ -97,10 +104,25 @@ guessing game.
 
 ## Your spots and your guesses
 
-The home screen keeps two local lists: spots you created (with a Share button)
-and spots you have guessed at (with your score). Both are device-only — nothing
-about them is stored server-side. The guessing history records first attempts
-only, for the same reason the leaderboard does.
+The home screen keeps two local lists: spots you created (with Share and
+leaderboard access) and spots you have guessed at (with your score and a link to
+that spot's leaderboard). Both are device-only — nothing about them is stored
+server-side. The guessing history records first attempts only, for the same
+reason the leaderboard does.
+
+Opening a short-link game also adds a `Started playing` row to its leaderboard,
+so the person who created the spot can see who has picked it up even if they
+never finish. Finishing upgrades that same row to the final score.
+
+The creator is not a player on their own spot. Their device recognises its own
+links and opens the leaderboard directly; creator links cannot add the creator
+to the guesses list or create a score.
+
+While a game is in progress, revealed clues and wrong guesses are also kept on
+the device. The homepage keeps a neutral `Open games` list so the player can
+return to an unfinished game without revealing who it is. Reopening the same
+link resumes that attempt. Once it is finished, the link opens in read-only
+leaderboard mode and cannot start another scored attempt on that device.
 
 ## Files
 

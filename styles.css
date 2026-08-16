@@ -529,14 +529,32 @@ input[type="range"] {
 /* ── leaderboard ──────────────────────────────────────── */
 .board { margin: 4px 0 26px; }
 
+/* board screen header: reveal photo beside the name, when there is one */
+.spot-head {
+  display: flex;
+  align-items: center;
+  gap: 15px;
+  margin-bottom: 22px;
+}
+.spot-head-text { min-width: 0; }          /* let long names wrap, not overflow */
+.spot-head .lede { margin: 0 0 3px; }
+.spot-head .sub  { margin: 0; }
+
+.spot-photo {
+  width: 72px;
+  height: 72px;
+  flex: none;
+  border-radius: 50%;
+  object-fit: cover;
+  border: 2px solid var(--accent);
+  background: var(--bg-raised);
+  animation: pop .35s cubic-bezier(.2, 1.5, .4, 1);
+}
+
 /* the standalone board screen reuses .spinner, which is centred by its
    flex parent on the loading screen but not here */
 #spot-spinner { margin: 8px auto 20px; }
 #spot-list:not(:empty) { margin-bottom: 22px; }
-
-.board-join { display: flex; gap: 9px; margin-bottom: 14px; }
-.board-join input[type="text"] { flex: 1; padding: 12px 14px; }
-.board-join .btn { flex: none; white-space: nowrap; }
 
 .board-note {
   margin: 0 0 12px;
@@ -561,6 +579,11 @@ input[type="range"] {
   border-color: var(--accent);
   background: var(--accent-deep);
 }
+.board-row.active {
+  background: var(--bg);
+  border-color: var(--line);
+}
+.board-row.active .board-name { color: var(--ink-dim); }
 
 .board-rank {
   flex: none;
@@ -598,6 +621,11 @@ input[type="range"] {
   font-variant-numeric: tabular-nums;
 }
 .board-row.you .board-score { color: var(--accent); }
+.board-score-active {
+  font-family: var(--sans);
+  font-size: 15px;
+  color: var(--ink-faint);
+}
 
 /* ── recent / howto ───────────────────────────────────── */
 .recent { margin-top: 30px; }
@@ -668,6 +696,51 @@ input[type="range"] {
   border-radius: var(--r-pill);
   cursor: pointer;
 }
+
+.identity-line {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin: 26px 0 4px;
+  padding: 14px 0;
+  border-top: 1px solid var(--line);
+  border-bottom: 1px solid var(--line);
+}
+.identity-copy { flex: 1; min-width: 0; }
+.identity-copy .recent-title { margin-bottom: 5px; }
+.identity-name {
+  margin: 0;
+  font-weight: 700;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.identity-hint {
+  margin: 3px 0 0;
+  color: var(--ink-faint);
+  font-size: 12.5px;
+}
+.identity-form {
+  margin: 15px 0 4px;
+  padding: 14px;
+  background: var(--bg-raised);
+  border: 1px solid var(--line);
+  border-radius: 11px;
+}
+.identity-form label {
+  display: block;
+  margin-bottom: 8px;
+  font-size: 13px;
+  font-weight: 700;
+}
+.identity-form-row {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+.identity-form-row input { min-width: 0; flex: 1; }
+.identity-form-row .btn { flex: none; }
+.identity-form .hint { margin: 8px 0 0; }
 
 .howto { margin-top: 34px; }
 .howto-list { margin: 0; padding-left: 20px; color: var(--ink-dim); font-size: 15px; }

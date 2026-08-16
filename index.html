@@ -59,6 +59,31 @@
 
       <button class="btn btn-primary btn-block" id="home-create">I spotted someone</button>
 
+      <div class="identity-line" id="player-identity">
+        <div class="identity-copy">
+          <h3 class="recent-title">Leaderboard name</h3>
+          <p class="identity-name" id="player-name"></p>
+          <p class="identity-hint">Shown on your leaderboard entries.</p>
+        </div>
+        <button class="recent-copy" type="button" id="player-name-edit">Change</button>
+      </div>
+
+      <form class="identity-form hidden" id="player-name-form">
+        <label for="player-name-input">Your leaderboard name</label>
+        <div class="identity-form-row">
+          <input type="text" id="player-name-input" maxlength="24" placeholder="Your name"
+                 autocomplete="nickname">
+          <button class="btn btn-primary btn-small" type="submit">Save</button>
+          <button class="btn btn-quiet btn-small" type="button" id="player-name-cancel">Cancel</button>
+        </div>
+        <p class="hint">Leave it blank to use your automatic player name.</p>
+      </form>
+
+      <div id="home-open" class="recent hidden">
+        <h3 class="recent-title">Open games</h3>
+        <ul class="recent-list" id="open-list"></ul>
+      </div>
+
       <div id="home-recent" class="recent hidden">
         <h3 class="recent-title">Your spots</h3>
         <ul class="recent-list" id="recent-list"></ul>
@@ -224,7 +249,7 @@
         photo and make the link again.</p>
 
       <button class="btn btn-primary btn-block" id="share-copy">Share link</button>
-      <button class="btn btn-ghost btn-block" id="share-play">Preview the game</button>
+      <button class="btn btn-ghost btn-block" id="share-play">View leaderboard</button>
       <button class="btn btn-quiet btn-block" id="share-home">Back to start</button>
     </div>
   </section>
@@ -238,8 +263,13 @@
     </header>
 
     <div class="pad">
-      <h2 class="lede" id="spot-name"></h2>
-      <p class="sub" id="spot-when"></p>
+      <div class="spot-head">
+        <img class="spot-photo hidden" id="spot-photo" alt="" width="72" height="72">
+        <div class="spot-head-text">
+          <h2 class="lede" id="spot-name"></h2>
+          <p class="sub" id="spot-when"></p>
+        </div>
+      </div>
 
       <div class="spinner hidden" id="spot-spinner" aria-hidden="true"></div>
       <p class="board-note hidden" id="spot-note"></p>
@@ -247,6 +277,7 @@
 
       <button class="btn btn-primary btn-block" id="spot-share">Share link</button>
       <button class="btn btn-ghost btn-block" id="spot-play">Preview the game</button>
+      <button class="btn btn-quiet btn-block" id="spot-home">Back to homepage</button>
     </div>
   </section>
 
@@ -318,19 +349,13 @@
       <!-- leaderboard: short-link spots only -->
       <section class="board hidden" id="board">
         <h3 class="recent-title">Leaderboard</h3>
-
-        <form class="board-join" id="board-join">
-          <input type="text" id="board-name" maxlength="24" placeholder="Your name"
-                 autocomplete="nickname" aria-label="Your name">
-          <button type="submit" class="btn btn-primary btn-small" id="board-submit">Add my score</button>
-        </form>
-
         <p class="board-note hidden" id="board-note"></p>
         <ol class="board-list" id="board-list"></ol>
       </section>
 
       <button class="btn btn-primary btn-block" id="result-share">Share my score</button>
       <button class="btn btn-ghost btn-block hidden" id="result-toshare">Back to your link</button>
+      <button class="btn btn-quiet btn-block" id="result-home">Back to homepage</button>
       <button class="btn btn-ghost btn-block" id="result-create">Spot someone yourself</button>
     </div>
   </section>

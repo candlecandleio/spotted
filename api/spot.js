@@ -14,6 +14,7 @@ const CODE_LEN = 5;
 const MAX_BODY = 220 * 1024;   // generous for one photo, mean to anything else
 
 const CLUE_KEYS = ['year', 'form', 'eth', 'sex', 'left', 'rating'];
+const okPlayer = (v) => /^[A-Za-z0-9_-]{8,40}$/.test(v);
 
 const pathFor = (code) => `p/${code}.json`;
 
@@ -55,6 +56,11 @@ function clean(input) {
       : [],
     clues,
   };
+
+  // Keep the anonymous creator id with the spot so the creator can be
+  // recognised when they open their own link again.
+  const createdBy = str(input.createdBy, 40).trim();
+  if (okPlayer(createdBy)) out.createdBy = createdBy;
 
   // base64url only, so nothing script-shaped can survive the round trip
   const img = str(input.img, 300000);
