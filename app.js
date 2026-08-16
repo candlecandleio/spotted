@@ -138,6 +138,74 @@ function saveMine(entry) {
   catch { /* private browsing — not worth surfacing */ }
 }
 
+/* ── spots you have played ────────────────────────────
+   Your own record of games you guessed at, kept on the device. Like
+   the leaderboard, only the first attempt is recorded — replaying once
+   you know the answer would make the history meaningless. */
+
+const PLAYED_KEY = 'spotted.played.v1';
+
+function loadPlayed() {
+  try { return JSON.parse(localStorage.getItem(PLAYED_KEY)) || []; }
+  catch { return []; }
+}
+
+function savePlayed(entry) {
+  const played = loadPlayed();
+  if (played.some((p) => p.key === entry.key)) return;   // first go only
+  played.unshift(entry);
+  try { localStorage.setItem(PLAYED_KEY, JSON.stringify(played.slice(0, 20))); }
+  catch { /* private browsing */ }
+}
+
+function renderPlayed() {
+  const played = loadPlayed();
+  const wrap = $('home-played');
+  const list = $('played-list');
+  wrap.classList.toggle('hidden', played.length === 0);
+  list.innerHTML = '';
+
+  played.forEach((entry) => {
+    const li = document.createElement('li');
+    li.className = 'recent-item';
+
+    const text = document.createElement('div');
+    text.className = 'recent-text';
+
+    const name = document.createElement('span');
+    name.className = 'recent-name';
+    name.textContent = entry.name;
+
+    const detail = document.createElement('span');
+    detail.className = 'recent-date';
+    const bits = [whenLabel(entry.at)];
+    if (entry.won) {
+      bits.push(`${entry.clues} clue${entry.clues === 1 ? '' : 's'}`);
+      if (entry.wrong) bits.push(`${entry.wrong} wrong`);
+    }
+    detail.textContent = bits.join(' · ');
+
+    text.append(name, detail);
+
+    const score = document.createElement('span');
+    score.className = 'played-score' + (entry.won ? '' : ' lost');
+    score.textContent = entry.won ? entry.score : 'Missed';
+
+    li.append(text, score);
+
+    if (entry.url) {
+      li.classList.add('recent-item-link');
+      li.tabIndex = 0;
+      li.setAttribute('role', 'link');
+      const go = () => { location.href = entry.url; };
+      on(li, 'click', go);
+      on(li, 'keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); go(); } });
+    }
+
+    list.append(li);
+  });
+}
+
 /* Spotting the same person twice is normal, so the list needs the time
    as well as the date to tell two entries apart. */
 function whenLabel(ts) {
@@ -917,6 +985,19 @@ function finish(won, note) {
       + 'Think you can beat that?'
     : 'Spotted beat me — I ran out of guesses. Reckon you can get it?';
 
+  if (!game.preview) {
+    savePlayed({
+      key: game.code || location.href,
+      url: game.code ? location.href : '',
+      name: game.puzzle.name,
+      score,
+      won,
+      clues: game.revealed.size,
+      wrong: game.wrong,
+      at: Date.now(),
+    });
+  }
+
   show('result');
   if (won) requestAnimationFrame(() => confetti($('confetti')));
   setupBoard();
@@ -975,6 +1056,7 @@ function goHome() {
     history.replaceState(null, '', '/');
   }
   renderMine();
+  renderPlayed();
   show('home');
 }
 
@@ -1097,6 +1179,7 @@ on($('board-join'), 'submit', (e) => { e.preventDefault(); submitScore(game.code
   if (await routeFromPath()) return;
   if (routeFromHash()) return;
   renderMine();
+  renderPlayed();
   // /?new=1 is the home-screen shortcut — go straight to the create screen.
   if (/[?&]new=1/.test(location.search)) { resetCreate(); show('create'); }
   else show('home');

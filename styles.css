@@ -633,6 +633,25 @@ input[type="range"] {
   color: var(--ink-faint);
   font-variant-numeric: tabular-nums;
 }
+.recent-item-link { cursor: pointer; transition: border-color .15s ease; }
+.recent-item-link:hover { border-color: var(--card-hi); }
+.recent-item-link:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+.played-score {
+  flex: none;
+  font-family: var(--serif);
+  font-size: 21px;
+  font-weight: 700;
+  color: var(--accent);
+  font-variant-numeric: tabular-nums;
+}
+.played-score.lost {
+  font-family: var(--sans);
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--ink-faint);
+}
+
 .recent-copy {
   border: 0;
   background: var(--accent-deep);
