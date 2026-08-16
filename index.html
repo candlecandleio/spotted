@@ -2,11 +2,29 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
 <meta name="theme-color" content="#0a0f0f">
 <title>Spotted</title>
+<meta name="description" content="Guess who I saw out and about.">
+
+<!-- installed-app behaviour -->
+<link rel="manifest" href="/manifest.webmanifest">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Spotted">
+<link rel="apple-touch-icon" href="/icons/apple-touch-icon.png">
+<link rel="icon" href="/icons/favicon.ico" sizes="any">
+<link rel="icon" href="/icons/icon-192.png" type="image/png">
+
+<!-- link previews in group chats -->
+<meta property="og:title" content="Spotted">
+<meta property="og:description" content="Guess who I saw out and about.">
+<meta property="og:type" content="website">
+<meta property="og:image" content="/icons/icon-512.png">
+<meta name="twitter:card" content="summary">
+
 <link rel="stylesheet" href="styles.css">
-<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>👀</text></svg>">
 </head>
 <body>
 
@@ -254,6 +272,21 @@
       <button class="btn btn-ghost btn-block" id="result-create">Spot someone yourself</button>
     </div>
   </section>
+
+  <!-- ───────────── THE ADVERT ─────────────
+       Entirely fictional. No such shop exists. -->
+  <aside class="ad" id="ad">
+    <span class="ad-flag">Advertisement</span>
+    <button class="ad-body" type="button" id="ad-body">
+      <span class="ad-shine" aria-hidden="true"></span>
+      <span class="ad-star ad-star-1" aria-hidden="true">★</span>
+      <span class="ad-star ad-star-2" aria-hidden="true">✦</span>
+      <span class="ad-name">Oli's Emporium</span>
+      <span class="ad-slogan" id="ad-slogan">Everything must go. Everything.</span>
+      <span class="ad-cta">SHOP NOW</span>
+      <span class="ad-small">Est. allegedly · No refunds · Not a real shop</span>
+    </button>
+  </aside>
 
 </div>
 

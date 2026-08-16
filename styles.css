@@ -517,6 +517,122 @@ input[type="range"] {
 .howto-list li { margin-bottom: 8px; }
 .howto-list strong { color: var(--ink); }
 
+/* ── the advert ───────────────────────────────────────
+   Deliberately tacky. It is meant to look like it wandered in
+   from a worse website, so it ignores the tokens above. */
+
+.ad {
+  margin: 8px var(--pad) 34px;
+  display: block;
+}
+
+.ad-flag {
+  display: block;
+  font-size: 9.5px;
+  text-transform: uppercase;
+  letter-spacing: 1.6px;
+  color: #4a5a58;
+  margin-bottom: 6px;
+  text-align: center;
+}
+
+.ad-body {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 5px;
+  width: 100%;
+  padding: 18px 16px 14px;
+  overflow: hidden;
+  cursor: pointer;
+  font-family: var(--sans);
+  border: 3px ridge #f0c14b;
+  border-radius: 6px;
+  background:
+    repeating-linear-gradient(45deg, rgba(255,255,255,.05) 0 10px, transparent 10px 20px),
+    linear-gradient(160deg, #6d2f8f 0%, #a3238e 45%, #d4145a 100%);
+  box-shadow: 0 0 0 1px #2a0f38, 0 6px 22px rgba(163,35,142,.28);
+  animation: adpulse 2.6s ease-in-out infinite;
+}
+@keyframes adpulse {
+  0%, 100% { box-shadow: 0 0 0 1px #2a0f38, 0 6px 22px rgba(163,35,142,.28); }
+  50%      { box-shadow: 0 0 0 1px #2a0f38, 0 6px 30px rgba(240,193,75,.42); }
+}
+
+/* the sweep of shine that every bad banner ad has */
+.ad-shine {
+  position: absolute;
+  top: 0; bottom: 0;
+  width: 45%;
+  background: linear-gradient(100deg, transparent, rgba(255,255,255,.32), transparent);
+  animation: adshine 3.4s ease-in-out infinite;
+}
+@keyframes adshine {
+  0%       { left: -50%; }
+  60%,100% { left: 115%; }
+}
+
+.ad-star {
+  position: absolute;
+  color: #ffe27a;
+  font-size: 15px;
+  animation: adtwinkle 1.8s ease-in-out infinite;
+}
+.ad-star-1 { top: 9px;  left: 13px; }
+.ad-star-2 { bottom: 9px; right: 15px; animation-delay: .7s; }
+@keyframes adtwinkle {
+  0%, 100% { opacity: .35; transform: scale(.8) rotate(0deg); }
+  50%      { opacity: 1;   transform: scale(1.25) rotate(20deg); }
+}
+
+.ad-name {
+  font-family: var(--serif);
+  font-size: 25px;
+  font-weight: 700;
+  color: #fff8dc;
+  letter-spacing: -0.3px;
+  text-shadow: 0 2px 0 #6d1147, 0 0 18px rgba(255,226,122,.5);
+  z-index: 1;
+}
+
+.ad-slogan {
+  font-size: 13.5px;
+  font-weight: 700;
+  font-style: italic;
+  color: #ffe27a;
+  text-align: center;
+  min-height: 19px;
+  z-index: 1;
+}
+
+.ad-cta {
+  margin-top: 4px;
+  font-size: 12.5px;
+  font-weight: 800;
+  letter-spacing: 1.3px;
+  color: #4a0d2e;
+  background: linear-gradient(#ffe27a, #f0c14b);
+  padding: 7px 20px;
+  border-radius: 4px;
+  border: 1px solid #fff3c4;
+  z-index: 1;
+}
+
+.ad-small {
+  font-size: 9.5px;
+  color: rgba(255,255,255,.62);
+  letter-spacing: .3px;
+  text-align: center;
+  z-index: 1;
+}
+
+.ad-body:active { transform: scale(.985); }
+
+@media (prefers-reduced-motion: reduce) {
+  .ad-shine { display: none; }
+}
+
 /* ── toast ────────────────────────────────────────────── */
 .toast {
   position: fixed;

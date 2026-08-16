@@ -574,9 +574,64 @@ function goHome() {
   show('home');
 }
 
+/* ── the advert ───────────────────────────────────────
+   Fictional. Rotates a slogan every few seconds and does
+   nothing at all when clicked, much like the real thing. */
+
+const AD_SLOGANS = [
+  'Everything must go. Everything.',
+  'If we don\'t have it, you don\'t need it.',
+  'Now accepting cash, favours and eye contact.',
+  'Two for one. Sometimes three for one.',
+  'Open whenever Oli is awake.',
+  'Voted "a shop" four years running.',
+  'Prices so low they are frankly suspicious.',
+  'No questions asked. Please, no questions.',
+  'Bulk discounts on things you will never use.',
+  'Our stock is a mystery even to us.',
+];
+
+const AD_CLICKS = [
+  'Oli is with a customer. Please hold.',
+  'The shutters are down. Try knocking.',
+  'Oli says he\'ll do you a deal on Tuesday.',
+  'Out of stock. Was never in stock.',
+  'Your order has been placed and immediately lost.',
+];
+
+function initAd() {
+  const slogan = $('ad-slogan');
+  let i = Math.floor(Math.random() * AD_SLOGANS.length);
+  slogan.textContent = AD_SLOGANS[i];
+
+  setInterval(() => {
+    i = (i + 1) % AD_SLOGANS.length;
+    slogan.style.opacity = '0';
+    setTimeout(() => {
+      slogan.textContent = AD_SLOGANS[i];
+      slogan.style.opacity = '1';
+    }, 260);
+  }, 4200);
+
+  slogan.style.transition = 'opacity .26s ease';
+
+  on($('ad-body'), 'click', () => {
+    toast(AD_CLICKS[Math.floor(Math.random() * AD_CLICKS.length)]);
+  });
+}
+
 /* ── wire up ─────────────────────────────────────────── */
 
 initCreate();
+initAd();
+
+/* Installed-app plumbing: cache the shell so it launches offline, and
+   honour the "New spot" home-screen shortcut. */
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('/sw.js').catch(() => { /* file:// or unsupported */ });
+  });
+}
 
 on($('home-create'),   'click', () => { resetCreate(); show('create'); });
 on($('create-back'),   'click', goHome);
@@ -624,7 +679,9 @@ window.addEventListener('hashchange', () => { if (!routeFromHash()) goHome(); })
 
 if (!routeFromHash()) {
   renderMine();
-  show('home');
+  // /?new=1 is the home-screen shortcut — go straight to the create screen.
+  if (/[?&]new=1/.test(location.search)) { resetCreate(); show('create'); }
+  else show('home');
 }
 
 })();
