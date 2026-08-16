@@ -1,10 +1,9 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "outputDirectory": ".",
-  "cleanUrls": true,
   "rewrites": [
     {
-      "source": "/:code([a-z0-9]{4,8})",
+      "source": "/:code([a-z0-9][a-z0-9][a-z0-9][a-z0-9][a-z0-9])",
       "destination": "/index.html"
     }
   ],
