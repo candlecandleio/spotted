@@ -1,7 +1,7 @@
 /* Service worker: makes Spotted launch instantly and work with no signal.
    Bump CACHE when the app files change, or installed copies keep the old ones. */
 
-const CACHE = 'spotted-v11';
+const CACHE = 'spotted-v12';
 
 const SHELL = [
   '/',
