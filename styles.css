@@ -565,6 +565,25 @@ input[type="range"] {
 .howto-list li { margin-bottom: 8px; }
 .howto-list strong { color: var(--ink); }
 
+/* ── loading ──────────────────────────────────────────── */
+.loading-pad {
+  min-height: 55vh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+}
+.spinner {
+  width: 34px; height: 34px;
+  margin-bottom: 18px;
+  border: 3px solid var(--line);
+  border-top-color: var(--accent);
+  border-radius: 50%;
+  animation: spin .8s linear infinite;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+
 /* ── the advert ───────────────────────────────────────
    Deliberately tacky. It is meant to look like it wandered in
    from a worse website, so it ignores the tokens above. */

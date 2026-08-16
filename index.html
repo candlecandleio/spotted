@@ -30,6 +30,21 @@
 
 <div id="app">
 
+  <!-- ───────────── LOADING ───────────── -->
+  <section class="screen hidden" id="screen-loading">
+    <header class="topbar">
+      <span class="topbar-spacer"></span>
+      <h1 class="topbar-title">Spotted</h1>
+      <span class="topbar-spacer"></span>
+    </header>
+    <div class="pad loading-pad">
+      <div class="spinner" id="loading-spinner" aria-hidden="true"></div>
+      <h2 class="lede center" id="loading-text">Fetching the spot…</h2>
+      <p class="sub center" id="loading-sub">One moment.</p>
+      <button class="btn btn-ghost btn-block hidden" id="loading-home">Back to start</button>
+    </div>
+  </section>
+
   <!-- ───────────── HOME ───────────── -->
   <section class="screen" id="screen-home">
     <header class="topbar">

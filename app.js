@@ -26,7 +26,7 @@ const STORE_KEY = 'spotted.mine.v1';
 const $  = (id) => document.getElementById(id);
 const on = (el, ev, fn) => el && el.addEventListener(ev, fn);
 
-const SCREENS = ['home', 'create', 'share', 'play', 'result'];
+const SCREENS = ['loading', 'home', 'create', 'share', 'play', 'result'];
 function show(name) {
   SCREENS.forEach((s) => $('screen-' + s).classList.toggle('hidden', s !== name));
   window.scrollTo(0, 0);
@@ -194,9 +194,16 @@ async function copyText(text, okMsg) {
    fits PHOTO_BUDGET bytes. A 260px thumbnail at q0.6 lands around
    8-12KB, which keeps the finished link comfortably sendable. */
 
-const PHOTO_SIZES  = [260, 220, 180, 148];
-const PHOTO_QUALS  = [0.62, 0.5, 0.4, 0.3];
-const PHOTO_BUDGET = 11000;   // base64 chars; roughly 8KB of JPEG
+/* Two budgets. Short links keep the photo server-side, so it can be
+   properly sharp; the long fallback link has to carry it in the URL and
+   must stay tiny. */
+const PHOTO_SIZES  = [420, 340, 260, 200];
+const PHOTO_QUALS  = [0.82, 0.7, 0.58, 0.45];
+const PHOTO_BUDGET = 120000;  // base64 chars, stored server-side
+
+const PHOTO_SIZES_URL  = [260, 220, 180, 148];
+const PHOTO_QUALS_URL  = [0.62, 0.5, 0.4, 0.3];
+const PHOTO_BUDGET_URL = 11000;
 
 // The photo travels as its own URL param rather than inside the JSON —
 // it is already base64, and packing it into the JSON would base64 it a
@@ -313,8 +320,12 @@ function initCropper() {
 
 /* Render the framed circle to a square JPEG, stepping quality then size
    down until it fits the URL budget. */
-function exportPhoto() {
+function exportPhoto(forUrl) {
   if (!crop) return '';
+
+  const sizes  = forUrl ? PHOTO_SIZES_URL  : PHOTO_SIZES;
+  const quals  = forUrl ? PHOTO_QUALS_URL  : PHOTO_QUALS;
+  const budget = forUrl ? PHOTO_BUDGET_URL : PHOTO_BUDGET;
 
   const s = crop.cover * crop.zoom;
   const sx = -crop.x / s;
@@ -326,14 +337,14 @@ function exportPhoto() {
   let best = '';
 
   outer:
-  for (const px of PHOTO_SIZES) {
+  for (const px of sizes) {
     canvas.width = canvas.height = px;
     ctx.imageSmoothingQuality = 'high';
     ctx.clearRect(0, 0, px, px);
     ctx.drawImage(crop.img, sx, sy, sSide, sSide, 0, 0, px, px);
-    for (const q of PHOTO_QUALS) {
+    for (const q of quals) {
       best = canvas.toDataURL('image/jpeg', q).split(',')[1];
-      if (best.length <= PHOTO_BUDGET) break outer;
+      if (best.length <= budget) break outer;
     }
   }
 
@@ -420,9 +431,10 @@ function initCreate() {
     });
   });
 
-  on($('create-form'), 'submit', (e) => {
+  on($('create-form'), 'submit', async (e) => {
     e.preventDefault();
     const err = $('create-error');
+    const submit = e.target.querySelector('button[type=submit]');
 
     if (!chosenSex) {
       err.textContent = 'Pick a biological sex — it is one of the clues.';
@@ -446,12 +458,38 @@ function initCreate() {
       },
     };
 
-    const photo = exportPhoto();
-
     // location.origin is "null" on file:// — build from href instead.
-    const base = location.href.split('#')[0].split('?')[0];
-    const url = base + '#p=' + encode(puzzle)
-              + (photo ? '&i=' + photo : '');
+    const origin = location.href.split('#')[0].split('?')[0].replace(/\/[^/]*$/, '/');
+
+    submit.disabled = true;
+    submit.textContent = 'Making your link…';
+
+    let url = '';
+    try {
+      const body = { puzzle: { ...puzzle } };
+      const photo = exportPhoto(false);
+      if (photo) body.puzzle.img = photo;
+
+      const res = await fetch('/api/spot', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+      if (!res.ok) throw new Error('store failed: ' + res.status);
+
+      const { code } = await res.json();
+      if (!code) throw new Error('no code returned');
+      url = origin + code;
+    } catch (e) {
+      // Fall back to the self-contained link so a bad day for the API
+      // never stops anyone making a spot. Longer, but it always works.
+      console.warn('short link unavailable, using inline link:', e);
+      const photo = exportPhoto(true);
+      url = origin + '#p=' + encode(puzzle) + (photo ? '&i=' + photo : '');
+    }
+
+    submit.disabled = false;
+    submit.textContent = 'Create the link';
 
     $('share-long').classList.toggle('hidden', url.length < 12000);
     $('share-url').textContent = url;
@@ -688,6 +726,39 @@ function finish(won, note) {
 
 /* ── routing ─────────────────────────────────────────── */
 
+/* A short link is just /<code>. Fetch the puzzle it points at. */
+const SHORT_CODE = /^\/([a-z0-9]{4,8})\/?$/;
+
+async function routeFromPath() {
+  const m = SHORT_CODE.exec(location.pathname);
+  if (!m) return false;
+
+  const code = m[1];
+  show('loading');
+
+  try {
+    const res = await fetch('/api/spot?c=' + encodeURIComponent(code));
+    if (res.status === 404) throw new Error('gone');
+    if (!res.ok) throw new Error('lookup failed: ' + res.status);
+
+    const { puzzle } = await res.json();
+    if (!puzzle || !puzzle.name || !puzzle.clues) throw new Error('bad payload');
+
+    lastCode = code;
+    startGame(puzzle);
+    return true;
+  } catch (e) {
+    console.warn('could not load spot:', e);
+    $('loading-text').textContent = 'That spot could not be found.';
+    $('loading-sub').textContent = 'The link may be mistyped, or the spot was removed.';
+    $('loading-spinner').classList.add('hidden');
+    $('loading-home').classList.remove('hidden');
+    return true;   // handled — do not fall through to the home screen
+  }
+}
+
+let lastCode = '';
+
 function routeFromHash() {
   const m = /[#&]p=([^&]+)/.exec(location.hash);
   if (!m) return false;
@@ -705,7 +776,9 @@ function routeFromHash() {
 }
 
 function goHome() {
-  if (location.hash) history.replaceState(null, '', location.pathname);
+  if (location.hash || SHORT_CODE.test(location.pathname)) {
+    history.replaceState(null, '', '/');
+  }
   renderMine();
   show('home');
 }
@@ -777,14 +850,29 @@ on($('result-create'), 'click', () => { resetCreate(); show('create'); });
 
 on($('share-copy'), 'click', (e) => copyText(e.currentTarget.dataset.url, 'Link copied'));
 
-on($('share-play'), 'click', () => {
+on($('share-play'), 'click', async () => {
   const url = $('share-copy').dataset.url || '';
+
+  // Long fallback link: everything needed is already in the URL.
   const m = /[#&]p=([^&]+)/.exec(url);
-  if (!m) return;
-  const puzzle = decode(m[1]);
-  const img = /[#&]i=([^&]+)/.exec(url);
-  if (img) puzzle.img = img[1];
-  startGame(puzzle, true);
+  if (m) {
+    const puzzle = decode(m[1]);
+    const img = /[#&]i=([^&]+)/.exec(url);
+    if (img) puzzle.img = img[1];
+    startGame(puzzle, true);
+    return;
+  }
+
+  // Short link: fetch it back, so the preview is exactly what they'll get.
+  const code = (url.split('/').pop() || '').trim();
+  if (!code) return;
+  try {
+    const res = await fetch('/api/spot?c=' + encodeURIComponent(code));
+    const { puzzle } = await res.json();
+    startGame(puzzle, true);
+  } catch {
+    toast('Could not load the preview');
+  }
 });
 
 if (navigator.share) {
@@ -813,11 +901,17 @@ on($('result-share'), 'click', (e) => copyText(e.currentTarget.dataset.text, 'Sc
 
 window.addEventListener('hashchange', () => { if (!routeFromHash()) goHome(); });
 
-if (!routeFromHash()) {
+on($('loading-home'), 'click', goHome);
+
+/* Three ways in: a short link (/abcde), an old self-contained link
+   (#p=...), or the app itself. */
+(async () => {
+  if (await routeFromPath()) return;
+  if (routeFromHash()) return;
   renderMine();
   // /?new=1 is the home-screen shortcut — go straight to the create screen.
   if (/[?&]new=1/.test(location.search)) { resetCreate(); show('create'); }
   else show('home');
-}
+})();
 
 })();
