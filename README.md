@@ -69,13 +69,50 @@ that path is still handled on load. It also serves as the fallback: if the API
 is ever unreachable, the client generates one of those long links instead, so
 nobody is ever blocked from creating a spot.
 
+## Leaderboards, without accounts
+
+Every spot has its own board. Identity is a random id the browser mints once and
+keeps in `localStorage`, plus a display name you type the first time. No sign-up,
+no email, no password. The trade is that clearing site data loses your place,
+which is the right trade for a game played among friends.
+
+Two things make the board mean something:
+
+- **Scores are recomputed server-side** from the clues opened and guesses used.
+  A tampered client can still lie about *what it did*, but it cannot post a bare
+  "100" after burning every clue — the number always matches the story told
+  about it.
+- **Only your first attempt counts.** Once you have finished you know the answer,
+  so a replay would trivially score 100. Existing entries are never overwritten.
+
+Each score is its own blob at `s/<code>/<player>.json`. That avoids
+read-modify-write on a shared file, so two people finishing at the same moment
+cannot clobber each other. Reading a board is a prefix list plus a parallel
+fetch.
+
+This is friend-grade, not tamper-proof. Someone determined with dev tools open
+can still post a flattering-but-plausible result. Making that impossible would
+mean running the game logic on the server, which is a much bigger build for a
+guessing game.
+
+## Your spots and your guesses
+
+The home screen keeps two local lists: spots you created (with a Share button)
+and spots you have guessed at (with your score). Both are device-only — nothing
+about them is stored server-side. The guessing history records first attempts
+only, for the same reason the leaderboard does.
+
 ## Files
 
 | File | What's in it |
 | --- | --- |
-| `index.html` | All five screens: home, create, share, play, result |
+| `index.html` | All six screens: loading, home, create, share, play, result |
 | `styles.css` | Design tokens and layout; two-column clue grid on phones |
-| `app.js` | Encoding, guess matching, scoring, routing |
+| `app.js` | Cropper, guess matching, scoring, routing, leaderboard |
+| `api/spot.js` | Stores and looks up puzzles by short code |
+| `api/score.js` | Records and returns per-spot leaderboards |
+| `sw.js` | Offline shell cache for the installed app |
+| `tools/make-icons.py` | Regenerates the icon set |
 
 Your own spots are remembered in `localStorage` so you can re-copy a link from
 the home screen. Nothing else is stored.
