@@ -26,7 +26,7 @@ const STORE_KEY = 'spotted.mine.v1';
 const $  = (id) => document.getElementById(id);
 const on = (el, ev, fn) => el && el.addEventListener(ev, fn);
 
-const SCREENS = ['loading', 'home', 'create', 'share', 'play', 'result'];
+const SCREENS = ['loading', 'home', 'create', 'share', 'spot', 'play', 'result'];
 function show(name) {
   SCREENS.forEach((s) => $('screen-' + s).classList.toggle('hidden', s !== name));
   window.scrollTo(0, 0);
@@ -246,13 +246,26 @@ function renderMine() {
     copy.className = 'recent-copy';
     copy.type = 'button';
     copy.textContent = 'Share';
-    on(copy, 'click', () => share({ url: entry.url, okMsg: 'Link copied' }));
+    on(copy, 'click', (e) => {
+      e.stopPropagation();          // don't also open the board
+      share({ url: entry.url, okMsg: 'Link copied' });
+    });
 
     const text = document.createElement('div');
     text.className = 'recent-text';
     text.append(name, date);
 
     li.append(text, copy);
+
+    // Tap the row to see who has guessed it.
+    li.classList.add('recent-item-link');
+    li.tabIndex = 0;
+    li.setAttribute('role', 'button');
+    on(li, 'click', () => showSpotBoard(entry));
+    on(li, 'keydown', (e) => {
+      if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); showSpotBoard(entry); }
+    });
+
     list.append(li);
   });
 }
@@ -315,8 +328,15 @@ function playerId() {
 const savedName = () => { try { return localStorage.getItem(NAME_KEY) || ''; } catch { return ''; } };
 const rememberName = (n) => { try { localStorage.setItem(NAME_KEY, n); } catch { /* ok */ } };
 
-function renderBoard(board) {
-  const list = $('board-list');
+// A short link's code is its last path segment. Inline #p= links predate
+// codes entirely, so they have no board to show.
+function codeFromUrl(url) {
+  if (!url || url.includes('#p=')) return '';
+  const m = /\/([a-z0-9]{4,8})\/?(?:[?#].*)?$/.exec(url);
+  return m ? m[1] : '';
+}
+
+function renderBoard(board, list) {
   const me = playerId();
   list.innerHTML = '';
 
@@ -352,12 +372,53 @@ function renderBoard(board) {
   });
 }
 
+/* The board for one of your own spots, opened from the home screen.
+   You made it, so you already know who it is — the name is shown. */
+let openSpot = null;
+
+async function showSpotBoard(entry) {
+  openSpot = entry;
+  const code = codeFromUrl(entry.url);
+
+  $('spot-name').textContent = entry.name;
+  $('spot-when').textContent = `Spotted ${whenLabel(entry.at).toLowerCase()}`;
+  $('spot-list').innerHTML = '';
+  $('spot-note').classList.add('hidden');
+  show('spot');
+
+  if (!code) {
+    $('spot-note').textContent =
+      'This one was made before short links, so it has no leaderboard. '
+      + 'New spots you create will have one.';
+    $('spot-note').classList.remove('hidden');
+    return;
+  }
+
+  $('spot-spinner').classList.remove('hidden');
+  try {
+    const res = await fetch('/api/score?c=' + encodeURIComponent(code));
+    if (!res.ok) throw new Error('board ' + res.status);
+    const { board } = await res.json();
+
+    renderBoard(board || [], $('spot-list'));
+    if (!board || !board.length) {
+      $('spot-note').textContent = 'Nobody has played this one yet. Send them the link.';
+      $('spot-note').classList.remove('hidden');
+    }
+  } catch (e) {
+    console.warn('spot board unavailable:', e);
+    $('spot-note').textContent = 'Could not load the leaderboard. Try again in a moment.';
+    $('spot-note').classList.remove('hidden');
+  }
+  $('spot-spinner').classList.add('hidden');
+}
+
 async function loadBoard(code) {
   try {
     const res = await fetch('/api/score?c=' + encodeURIComponent(code));
     if (!res.ok) throw new Error('board ' + res.status);
     const { board } = await res.json();
-    renderBoard(board || []);
+    renderBoard(board || [], $('board-list'));
     return board || [];
   } catch (e) {
     console.warn('leaderboard unavailable:', e);
@@ -397,7 +458,7 @@ async function submitScore(code) {
       ? 'Your score is on the board. Only your first go counts.'
       : 'You were already on this board — your first score stands.';
     $('board-note').classList.remove('hidden');
-    renderBoard(board || []);
+    renderBoard(board || [], $('board-list'));
   } catch (e) {
     console.warn('could not submit score:', e);
     toast('Could not add your score');
@@ -1171,6 +1232,16 @@ on($('result-share'), 'click', (e) => share({
 window.addEventListener('hashchange', () => { if (!routeFromHash()) goHome(); });
 
 on($('loading-home'), 'click', goHome);
+on($('spot-back'),  'click', goHome);
+on($('spot-share'), 'click', () => {
+  if (openSpot) share({ url: openSpot.url, okMsg: 'Link copied' });
+});
+on($('spot-play'), 'click', () => {
+  if (!openSpot) return;
+  $('share-copy').dataset.url = openSpot.url;
+  $('share-url').textContent = openSpot.url;
+  $('share-play').click();
+});
 on($('board-join'), 'submit', (e) => { e.preventDefault(); submitScore(game.code); });
 
 /* Three ways in: a short link (/abcde), an old self-contained link

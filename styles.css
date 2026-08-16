@@ -529,6 +529,11 @@ input[type="range"] {
 /* ── leaderboard ──────────────────────────────────────── */
 .board { margin: 4px 0 26px; }
 
+/* the standalone board screen reuses .spinner, which is centred by its
+   flex parent on the loading screen but not here */
+#spot-spinner { margin: 8px auto 20px; }
+#spot-list:not(:empty) { margin-bottom: 22px; }
+
 .board-join { display: flex; gap: 9px; margin-bottom: 14px; }
 .board-join input[type="text"] { flex: 1; padding: 12px 14px; }
 .board-join .btn { flex: none; white-space: nowrap; }
