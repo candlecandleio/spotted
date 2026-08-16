@@ -4,7 +4,7 @@
   "cleanUrls": true,
   "rewrites": [
     {
-      "source": "/((?!api/)(?!.*\\.)[^/]+)",
+      "source": "/:code([a-z0-9]{4,8})",
       "destination": "/index.html"
     }
   ],
