@@ -546,8 +546,25 @@ input[type="range"] {
   border-radius: 11px;
   margin-bottom: 9px;
 }
-.recent-name { flex: 1; font-weight: 600; font-size: 15px; }
-.recent-date { font-size: 12.5px; color: var(--ink-faint); }
+.recent-text {
+  flex: 1;
+  min-width: 0;            /* let long names ellipsis rather than shove the button */
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.recent-name {
+  font-weight: 600;
+  font-size: 15px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.recent-date {
+  font-size: 12.5px;
+  color: var(--ink-faint);
+  font-variant-numeric: tabular-nums;
+}
 .recent-copy {
   border: 0;
   background: var(--accent-deep);

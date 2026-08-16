@@ -138,6 +138,23 @@ function saveMine(entry) {
   catch { /* private browsing — not worth surfacing */ }
 }
 
+/* Spotting the same person twice is normal, so the list needs the time
+   as well as the date to tell two entries apart. */
+function whenLabel(ts) {
+  const d = new Date(ts);
+  const time = d.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' });
+
+  const startOfDay = (x) => new Date(x.getFullYear(), x.getMonth(), x.getDate()).getTime();
+  const days = Math.round((startOfDay(new Date()) - startOfDay(d)) / 86400000);
+
+  if (days === 0) return `Today, ${time}`;
+  if (days === 1) return `Yesterday, ${time}`;
+
+  const opts = { day: 'numeric', month: 'short' };
+  if (d.getFullYear() !== new Date().getFullYear()) opts.year = 'numeric';
+  return `${d.toLocaleDateString(undefined, opts)}, ${time}`;
+}
+
 function renderMine() {
   const mine = loadMine();
   const wrap = $('home-recent');
@@ -155,7 +172,7 @@ function renderMine() {
 
     const date = document.createElement('span');
     date.className = 'recent-date';
-    date.textContent = new Date(entry.at).toLocaleDateString(undefined, { day: 'numeric', month: 'short' });
+    date.textContent = whenLabel(entry.at);
 
     const copy = document.createElement('button');
     copy.className = 'recent-copy';
@@ -163,7 +180,11 @@ function renderMine() {
     copy.textContent = 'Copy';
     on(copy, 'click', () => copyText(entry.url, 'Link copied'));
 
-    li.append(name, date, copy);
+    const text = document.createElement('div');
+    text.className = 'recent-text';
+    text.append(name, date);
+
+    li.append(text, copy);
     list.append(li);
   });
 }
@@ -715,10 +736,20 @@ function finish(won, note) {
   if (game.wrong) row(`Wrong guesses (${game.wrong})`, `−${game.wrong * WRONG_PENALTY}`);
   row('Total', `${score}`, 'bd-total');
 
-  const clueCount = game.revealed.size;
+  /* Never name the person here — this text gets pasted into the same
+     group chat as the link, and would spoil it for everyone else. Only
+     the score, the effort it took, and an invitation. */
+  const count = (n, one, many) => `${n} ${n === 1 ? one : many}`;
+  const clues = count(game.revealed.size, 'clue', 'clues');
+  const wrong = count(game.wrong, 'wrong guess', 'wrong guesses');
+
+  // In preview you are on the home screen, so use the link you just made.
+  const link = game.preview ? ($('share-copy').dataset.url || '') : location.href;
+
   $('result-share').dataset.text = won
-    ? `I got "${game.puzzle.name}" on Spotted — ${score} points, ${clueCount} clue${clueCount === 1 ? '' : 's'}, ${game.wrong} wrong guess${game.wrong === 1 ? '' : 'es'}.`
-    : `I gave up on Spotted. It was ${game.puzzle.name}.`;
+    ? `Got it on Spotted — ${score} points, ${clues}, ${wrong}. `
+      + `Think you can beat that?\n${link}`
+    : `Spotted beat me — I ran out of guesses. Reckon you can get it?\n${link}`;
 
   show('result');
   if (won) requestAnimationFrame(() => confetti($('confetti')));
