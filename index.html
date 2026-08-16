@@ -93,19 +93,27 @@
 
         <div class="field">
           <label>Reveal photo <span class="opt">optional</span></label>
-          <div class="photo-row">
-            <div class="photo-slot" id="f-photo-slot">
-              <span id="f-photo-empty">No photo</span>
-              <img id="f-photo-preview" alt="" hidden>
+          <div class="photo-editor hidden" id="photo-editor">
+            <div class="photo-circle" id="photo-circle">
+              <img id="photo-img" alt="" draggable="false">
             </div>
-            <div class="photo-actions">
-              <label class="btn btn-ghost btn-small" for="f-photo">Choose photo</label>
-              <input type="file" id="f-photo" accept="image/*" hidden>
-              <button type="button" class="btn btn-quiet btn-small hidden" id="f-photo-clear">Remove</button>
-            </div>
+            <label class="photo-zoom">
+              <span class="photo-zoom-icon">−</span>
+              <input type="range" id="photo-zoom" min="1" max="3" step="0.01" value="1"
+                     aria-label="Zoom">
+              <span class="photo-zoom-icon">+</span>
+            </label>
+            <p class="photo-tip">Drag the photo to reposition it</p>
           </div>
-          <p class="hint">Shown only after they've guessed or given up. Shrunk to a
-            thumbnail so the link stays sendable.</p>
+
+          <div class="photo-actions">
+            <label class="btn btn-ghost btn-small" for="f-photo" id="f-photo-label">Choose photo</label>
+            <input type="file" id="f-photo" accept="image/*" hidden>
+            <button type="button" class="btn btn-quiet btn-small hidden" id="f-photo-clear">Remove</button>
+          </div>
+
+          <p class="hint">Shown only after they've guessed or given up. Whatever sits
+            inside the circle is exactly what they'll see.</p>
         </div>
 
         <hr class="rule">

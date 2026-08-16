@@ -204,42 +204,140 @@ const PHOTO_BUDGET = 11000;   // base64 chars; roughly 8KB of JPEG
 const toDataUri = (b64) =>
   'data:image/jpeg;base64,' + b64.replace(/-/g, '+').replace(/_/g, '/');
 
-function shrinkPhoto(file) {
+/* The circular cropper. `crop` holds the live state: the loaded image,
+   how far it's zoomed past "just covers the circle", and where it's been
+   dragged to. Export reads the same numbers, so what you framed is
+   exactly what gets sent. */
+
+const CIRCLE = 170;   // must match .photo-circle in the stylesheet
+
+let crop = null;
+
+// The object URL stays alive for as long as the cropper is open — the
+// preview element reuses it — and is released in clearPhoto().
+function loadImage(file) {
   return new Promise((resolve, reject) => {
     const img = new Image();
     const url = URL.createObjectURL(file);
-
-    img.onload = () => {
-      URL.revokeObjectURL(url);
-
-      // centre square crop, so faces don't get stretched
-      const side = Math.min(img.width, img.height);
-      const sx = (img.width  - side) / 2;
-      const sy = (img.height - side) / 2;
-
-      const canvas = document.createElement('canvas');
-      const ctx = canvas.getContext('2d');
-      let best = '';
-
-      // Drop quality first, then dimensions — a slightly soft 260px
-      // thumbnail reads better than a crisp tiny one.
-      outer:
-      for (const px of PHOTO_SIZES) {
-        canvas.width = canvas.height = px;
-        ctx.imageSmoothingQuality = 'high';
-        ctx.drawImage(img, sx, sy, side, side, 0, 0, px, px);
-        for (const q of PHOTO_QUALS) {
-          best = canvas.toDataURL('image/jpeg', q).split(',')[1];
-          if (best.length <= PHOTO_BUDGET) break outer;
-        }
-      }
-
-      resolve(best.replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, ''));
-    };
-
+    img.onload = () => resolve(img);
     img.onerror = () => { URL.revokeObjectURL(url); reject(new Error('unreadable image')); };
     img.src = url;
   });
+}
+
+function openCropper(img) {
+  // cover: smallest scale at which the image still fills the circle
+  const cover = CIRCLE / Math.min(img.width, img.height);
+  crop = { img, cover, zoom: 1, x: 0, y: 0 };
+
+  const el = $('photo-img');
+  el.src = img.src;
+  $('photo-zoom').value = '1';
+
+  centreCrop();
+  $('photo-editor').classList.remove('hidden');
+  $('f-photo-clear').classList.remove('hidden');
+  $('f-photo-label').textContent = 'Change photo';
+}
+
+function centreCrop() {
+  const s = crop.cover * crop.zoom;
+  crop.x = (CIRCLE - crop.img.width  * s) / 2;
+  crop.y = (CIRCLE - crop.img.height * s) / 2;
+  applyCrop();
+}
+
+// Keep the circle covered — you can never drag the image off its own frame.
+function clampCrop() {
+  const s = crop.cover * crop.zoom;
+  const w = crop.img.width * s;
+  const h = crop.img.height * s;
+  crop.x = Math.min(0, Math.max(CIRCLE - w, crop.x));
+  crop.y = Math.min(0, Math.max(CIRCLE - h, crop.y));
+}
+
+function applyCrop() {
+  clampCrop();
+  const s = crop.cover * crop.zoom;
+  const el = $('photo-img');
+  el.style.width  = crop.img.width  * s + 'px';
+  el.style.height = crop.img.height * s + 'px';
+  el.style.left = crop.x + 'px';
+  el.style.top  = crop.y + 'px';
+}
+
+function initCropper() {
+  const circle = $('photo-circle');
+  let dragging = false, lastX = 0, lastY = 0;
+
+  on(circle, 'pointerdown', (e) => {
+    if (!crop) return;
+    dragging = true;
+    lastX = e.clientX; lastY = e.clientY;
+    circle.setPointerCapture(e.pointerId);
+    circle.classList.add('dragging');
+  });
+
+  on(circle, 'pointermove', (e) => {
+    if (!dragging || !crop) return;
+    crop.x += e.clientX - lastX;
+    crop.y += e.clientY - lastY;
+    lastX = e.clientX; lastY = e.clientY;
+    applyCrop();
+  });
+
+  const stop = (e) => {
+    if (!dragging) return;
+    dragging = false;
+    circle.classList.remove('dragging');
+    if (e.pointerId !== undefined && circle.hasPointerCapture(e.pointerId)) {
+      circle.releasePointerCapture(e.pointerId);
+    }
+  };
+  on(circle, 'pointerup', stop);
+  on(circle, 'pointercancel', stop);
+
+  on($('photo-zoom'), 'input', (e) => {
+    if (!crop) return;
+    const next = parseFloat(e.target.value);
+    // Zoom about the centre of the circle rather than the image origin,
+    // so the bit you framed stays framed.
+    const mid = CIRCLE / 2;
+    const ratio = next / crop.zoom;
+    crop.x = mid - (mid - crop.x) * ratio;
+    crop.y = mid - (mid - crop.y) * ratio;
+    crop.zoom = next;
+    applyCrop();
+  });
+}
+
+/* Render the framed circle to a square JPEG, stepping quality then size
+   down until it fits the URL budget. */
+function exportPhoto() {
+  if (!crop) return '';
+
+  const s = crop.cover * crop.zoom;
+  const sx = -crop.x / s;
+  const sy = -crop.y / s;
+  const sSide = CIRCLE / s;
+
+  const canvas = document.createElement('canvas');
+  const ctx = canvas.getContext('2d');
+  let best = '';
+
+  outer:
+  for (const px of PHOTO_SIZES) {
+    canvas.width = canvas.height = px;
+    ctx.imageSmoothingQuality = 'high';
+    ctx.clearRect(0, 0, px, px);
+    ctx.drawImage(crop.img, sx, sy, sSide, sSide, 0, 0, px, px);
+    for (const q of PHOTO_QUALS) {
+      best = canvas.toDataURL('image/jpeg', q).split(',')[1];
+      if (best.length <= PHOTO_BUDGET) break outer;
+    }
+  }
+
+  return best.replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
 }
 
 /* ── confetti ─────────────────────────────────────────
@@ -292,25 +390,25 @@ function confetti(canvas) {
 /* ── create ──────────────────────────────────────────── */
 
 let chosenSex = '';
-let chosenPhoto = '';
 
 function initCreate() {
   const rating = $('f-rating');
   on(rating, 'input', () => { $('f-rating-out').textContent = rating.value; });
 
+  initCropper();
+
   on($('f-photo'), 'change', async (e) => {
     const file = e.target.files && e.target.files[0];
     if (!file) return;
     try {
-      chosenPhoto = await shrinkPhoto(file);
-      showPhoto(chosenPhoto);
+      openCropper(await loadImage(file));
     } catch {
       toast('Could not read that image');
     }
     e.target.value = '';   // so re-picking the same file still fires
   });
 
-  on($('f-photo-clear'), 'click', () => { chosenPhoto = ''; showPhoto(''); });
+  on($('f-photo-clear'), 'click', clearPhoto);
 
   $('f-sex').querySelectorAll('.seg').forEach((btn) => {
     btn.setAttribute('aria-pressed', 'false');
@@ -348,10 +446,12 @@ function initCreate() {
       },
     };
 
+    const photo = exportPhoto();
+
     // location.origin is "null" on file:// — build from href instead.
-    const base = location.href.split('#')[0];
+    const base = location.href.split('#')[0].split('?')[0];
     const url = base + '#p=' + encode(puzzle)
-              + (chosenPhoto ? '&i=' + chosenPhoto : '');
+              + (photo ? '&i=' + photo : '');
 
     $('share-long').classList.toggle('hidden', url.length < 12000);
     $('share-url').textContent = url;
@@ -361,12 +461,13 @@ function initCreate() {
   });
 }
 
-function showPhoto(b64) {
-  const img = $('f-photo-preview');
-  img.hidden = !b64;
-  if (b64) img.src = toDataUri(b64);
-  $('f-photo-empty').classList.toggle('hidden', !!b64);
-  $('f-photo-clear').classList.toggle('hidden', !b64);
+function clearPhoto() {
+  if (crop) URL.revokeObjectURL(crop.img.src);
+  crop = null;
+  $('photo-editor').classList.add('hidden');
+  $('f-photo-clear').classList.add('hidden');
+  $('f-photo-label').textContent = 'Choose photo';
+  $('photo-img').removeAttribute('src');
 }
 
 function resetCreate() {
@@ -374,8 +475,7 @@ function resetCreate() {
   $('f-rating-out').textContent = '7';
   $('create-error').classList.add('hidden');
   chosenSex = '';
-  chosenPhoto = '';
-  showPhoto('');
+  clearPhoto();
   $('f-sex').querySelectorAll('.seg').forEach((b) => b.setAttribute('aria-pressed', 'false'));
 }
 
@@ -432,34 +532,70 @@ function renderGrid() {
     btn.type = 'button';
     btn.className = 'clue';
 
-    const label = document.createElement('span');
-    label.className = 'clue-label';
-    label.textContent = clue.label;
-    btn.append(label);
-
     if (game.revealed.has(clue.key)) {
-      btn.classList.add('revealed');
-      btn.disabled = true;
-      const val = document.createElement('span');
-      const text = game.puzzle.clues[clue.key] || '—';
-      val.className = 'clue-value' + (text.length > 12 ? ' long' : '');
-      val.textContent = text;
-      btn.append(val);
+      fillCard(btn, clue, false);
     } else {
-      const cost = document.createElement('span');
-      cost.className = 'clue-cost';
-      cost.textContent = `−${clue.cost} points`;
-      btn.append(cost);
+      setFace(btn, clue.label, `−${clue.cost} points`);
       on(btn, 'click', () => {
-        if (game.over) return;
+        if (game.over || game.revealed.has(clue.key)) return;
         game.revealed.add(clue.key);
-        renderGrid();
+        fillCard(btn, clue, true);     // only this card flips
         renderScore(true);
       });
     }
 
     grid.append(btn);
   });
+}
+
+function setFace(btn, labelText, costText) {
+  btn.textContent = '';
+  const label = document.createElement('span');
+  label.className = 'clue-label';
+  label.textContent = labelText;
+  btn.append(label);
+
+  const cost = document.createElement('span');
+  cost.className = 'clue-cost';
+  cost.textContent = costText;
+  btn.append(cost);
+}
+
+/* Turn one card over. `animate` is false when rebuilding a board that
+   was already partly revealed, so untouched cards stay still. */
+function fillCard(btn, clue, animate) {
+  const text = game.puzzle.clues[clue.key] || '—';
+
+  const swap = () => {
+    btn.textContent = '';
+    const label = document.createElement('span');
+    label.className = 'clue-label';
+    label.textContent = clue.label;
+
+    const val = document.createElement('span');
+    val.className = 'clue-value' + (text.length > 12 ? ' long' : '');
+    val.textContent = text;
+
+    btn.append(label, val);
+    btn.classList.add('revealed');
+    btn.disabled = true;
+  };
+
+  if (!animate || window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+    swap();
+    return;
+  }
+
+  // Half the flip happens face-down, so the answer appears edge-on.
+  btn.classList.add('flipping');
+  setTimeout(swap, 170);
+
+  // Clear on a timer rather than on animationend alone: a backgrounded
+  // tab never fires that event, which would strand the card mid-rotation
+  // and effectively invisible.
+  const done = () => btn.classList.remove('flipping');
+  btn.addEventListener('animationend', done, { once: true });
+  setTimeout(done, 500);
 }
 
 function submitGuess() {
