@@ -1,0 +1,241 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0a0f0f">
+<title>Spotted</title>
+<link rel="stylesheet" href="styles.css">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>👀</text></svg>">
+</head>
+<body>
+
+<div id="app">
+
+  <!-- ───────────── HOME ───────────── -->
+  <section class="screen" id="screen-home">
+    <header class="topbar">
+      <span class="topbar-spacer"></span>
+      <h1 class="topbar-title">Spotted</h1>
+      <span class="topbar-spacer"></span>
+    </header>
+
+    <div class="pad">
+      <h2 class="lede">Guess who I saw</h2>
+      <p class="sub">Spot someone out and about. Set the clues. Send it to the group.</p>
+
+      <button class="btn btn-primary btn-block" id="home-create">I spotted someone</button>
+
+      <div id="home-recent" class="recent hidden">
+        <h3 class="recent-title">Your spots</h3>
+        <ul class="recent-list" id="recent-list"></ul>
+      </div>
+
+      <div class="howto">
+        <h3 class="recent-title">How it works</h3>
+        <ol class="howto-list">
+          <li>You fill in six clues about the person you saw.</li>
+          <li>You get a link. Anyone who opens it plays.</li>
+          <li>They start on <strong>100 points</strong> and reveal clues to narrow it down.</li>
+          <li>Each clue costs points. They get <strong>5 wrong guesses</strong>, 2 points each. Guess early, score big.</li>
+        </ol>
+      </div>
+    </div>
+  </section>
+
+  <!-- ───────────── CREATE ───────────── -->
+  <section class="screen hidden" id="screen-create">
+    <header class="topbar">
+      <button class="iconbtn" id="create-back" aria-label="Back">←</button>
+      <h1 class="topbar-title">New spot</h1>
+      <span class="topbar-spacer"></span>
+    </header>
+
+    <div class="pad">
+      <h2 class="lede">Who did you see?</h2>
+      <p class="sub">Only you see this screen. Everything below becomes a hidden clue.</p>
+
+      <form id="create-form" autocomplete="off">
+
+        <div class="field">
+          <label for="f-name">Their name <span class="req">required</span></label>
+          <input type="text" id="f-name" placeholder="e.g. Daniel Okafor" required>
+          <p class="hint">Guesses are matched loosely — first name only, surname only, and small typos all count.</p>
+        </div>
+
+        <div class="field">
+          <label for="f-aliases">Other accepted answers <span class="opt">optional</span></label>
+          <input type="text" id="f-aliases" placeholder="Nicknames, separated by commas">
+        </div>
+
+        <div class="field">
+          <label for="f-by">Spotted by <span class="opt">optional</span></label>
+          <input type="text" id="f-by" placeholder="Your name">
+        </div>
+
+        <hr class="rule">
+        <h3 class="section-h">The clues</h3>
+
+        <div class="field">
+          <label for="f-year">Year <span class="cost">−10</span></label>
+          <select id="f-year" required>
+            <option value="" disabled selected>Their year, relative to yours…</option>
+            <option value="3+ years above me">3+ years above me</option>
+            <option value="2 years above me">2 years above me</option>
+            <option value="1 year above me">1 year above me</option>
+            <option value="Same year as me">Same year as me</option>
+            <option value="1 year below me">1 year below me</option>
+            <option value="2 years below me">2 years below me</option>
+            <option value="3+ years below me">3+ years below me</option>
+          </select>
+          <p class="hint">Relative to you, not an absolute year group — so it still
+            makes sense whoever ends up playing.</p>
+        </div>
+
+        <div class="field">
+          <label for="f-form">Form <span class="cost cost-big">−30</span></label>
+          <input type="text" id="f-form" placeholder="e.g. 11EBR" required>
+          <p class="hint">The big one. Costs the most because it gives the most away.</p>
+        </div>
+
+        <div class="field">
+          <label for="f-eth">Ethnicity <span class="cost">−20</span></label>
+          <input type="text" id="f-eth" placeholder="e.g. British Nigerian" required list="eth-list">
+          <datalist id="eth-list">
+            <option value="White British"></option>
+            <option value="Black African"></option>
+            <option value="Black Caribbean"></option>
+            <option value="South Asian"></option>
+            <option value="East Asian"></option>
+            <option value="Middle Eastern"></option>
+            <option value="Turkish"></option>
+            <option value="Eastern European"></option>
+            <option value="Mixed"></option>
+          </datalist>
+        </div>
+
+        <div class="field">
+          <label>Biological sex <span class="cost">−5</span></label>
+          <div class="segmented" id="f-sex" role="radiogroup" aria-label="Biological sex">
+            <button type="button" class="seg" data-value="Male">Male</button>
+            <button type="button" class="seg" data-value="Female">Female</button>
+          </div>
+        </div>
+
+        <div class="field">
+          <label for="f-left">Year they left Ashmole <span class="cost">−15</span></label>
+          <input type="text" id="f-left" placeholder="e.g. 2019, or 'still there'" required>
+        </div>
+
+        <div class="field">
+          <label for="f-rating">My rating of this person <span class="cost">−5</span></label>
+          <div class="rating-row">
+            <input type="range" id="f-rating" min="0" max="10" step="1" value="7">
+            <output class="rating-out" id="f-rating-out">7</output>
+            <span class="rating-max">/ 10</span>
+          </div>
+        </div>
+
+        <p class="formerror hidden" id="create-error"></p>
+        <button type="submit" class="btn btn-primary btn-block">Create the link</button>
+      </form>
+    </div>
+  </section>
+
+  <!-- ───────────── SHARE ───────────── -->
+  <section class="screen hidden" id="screen-share">
+    <header class="topbar">
+      <button class="iconbtn" id="share-back" aria-label="Back">←</button>
+      <h1 class="topbar-title">Ready</h1>
+      <span class="topbar-spacer"></span>
+    </header>
+
+    <div class="pad">
+      <div class="bigtick">👀</div>
+      <h2 class="lede center">Your spot is live</h2>
+      <p class="sub center">Send this link to the group. Don't open it in front of them.</p>
+
+      <div class="linkbox"><code id="share-url"></code></div>
+
+      <button class="btn btn-primary btn-block" id="share-copy">Copy link</button>
+      <button class="btn btn-ghost btn-block hidden" id="share-native">Share…</button>
+      <button class="btn btn-ghost btn-block" id="share-play">Preview the game</button>
+      <button class="btn btn-quiet btn-block" id="share-home">Back to start</button>
+    </div>
+  </section>
+
+  <!-- ───────────── PLAY ───────────── -->
+  <section class="screen hidden" id="screen-play">
+    <header class="topbar">
+      <button class="iconbtn" id="play-back" aria-label="Back">←</button>
+      <h1 class="topbar-title">Spotted</h1>
+      <span class="topbar-spacer"></span>
+    </header>
+
+    <div class="pad">
+      <h2 class="lede">Guess who I saw</h2>
+      <p class="sub" id="play-sub">Someone from Ashmole, past or present.</p>
+
+      <div class="scorebar">
+        <div class="score-cell">
+          <span class="score-icon">★</span>
+          <span>Points: <strong id="play-points">100</strong></span>
+        </div>
+        <div class="score-cell">
+          <span class="score-icon">?</span>
+          <span>Guesses left: <strong id="play-guesses">5</strong></span>
+        </div>
+      </div>
+
+      <div class="grid" id="play-grid"></div>
+
+      <div class="guessrow">
+        <input type="text" id="play-input" placeholder="Type a name…" autocomplete="off" enterkeyhint="go">
+      </div>
+      <p class="feedback" id="play-feedback">&nbsp;</p>
+
+      <div class="btnrow">
+        <button class="btn btn-ghost" id="play-giveup">Give up</button>
+        <button class="btn btn-primary" id="play-guess">Guess</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- ───────────── RESULT ───────────── -->
+  <section class="screen hidden" id="screen-result">
+    <header class="topbar">
+      <span class="topbar-spacer"></span>
+      <h1 class="topbar-title">Result</h1>
+      <span class="topbar-spacer"></span>
+    </header>
+
+    <div class="pad">
+      <div class="bigtick" id="result-emoji">🎉</div>
+      <h2 class="lede center" id="result-head">Got them</h2>
+      <p class="sub center" id="result-sub"></p>
+
+      <div class="answercard">
+        <span class="answercard-label">The person was</span>
+        <span class="answercard-name" id="result-name"></span>
+        <span class="answercard-by" id="result-by"></span>
+      </div>
+
+      <div class="scoreline">
+        <span class="scoreline-num" id="result-score">0</span>
+        <span class="scoreline-unit">points</span>
+      </div>
+
+      <ul class="breakdown" id="result-breakdown"></ul>
+
+      <button class="btn btn-primary btn-block" id="result-share">Copy my score</button>
+      <button class="btn btn-ghost btn-block" id="result-create">Spot someone yourself</button>
+    </div>
+  </section>
+
+</div>
+
+<div class="toast hidden" id="toast"></div>
+
+<script src="app.js"></script>
+</body>
+</html>
