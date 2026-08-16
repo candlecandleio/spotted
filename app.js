@@ -188,13 +188,129 @@ async function copyText(text, okMsg) {
   toast(ok ? okMsg : 'Copy failed — select the link and copy it');
 }
 
+/* ── photo ────────────────────────────────────────────
+   The whole puzzle rides in the URL, so a photo has to be tiny.
+   Square-crop to PHOTO_PX and step the JPEG quality down until it
+   fits PHOTO_BUDGET bytes. A 260px thumbnail at q0.6 lands around
+   8-12KB, which keeps the finished link comfortably sendable. */
+
+const PHOTO_SIZES  = [260, 220, 180, 148];
+const PHOTO_QUALS  = [0.62, 0.5, 0.4, 0.3];
+const PHOTO_BUDGET = 11000;   // base64 chars; roughly 8KB of JPEG
+
+// The photo travels as its own URL param rather than inside the JSON —
+// it is already base64, and packing it into the JSON would base64 it a
+// second time for a free 33% of bloat.
+const toDataUri = (b64) =>
+  'data:image/jpeg;base64,' + b64.replace(/-/g, '+').replace(/_/g, '/');
+
+function shrinkPhoto(file) {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    const url = URL.createObjectURL(file);
+
+    img.onload = () => {
+      URL.revokeObjectURL(url);
+
+      // centre square crop, so faces don't get stretched
+      const side = Math.min(img.width, img.height);
+      const sx = (img.width  - side) / 2;
+      const sy = (img.height - side) / 2;
+
+      const canvas = document.createElement('canvas');
+      const ctx = canvas.getContext('2d');
+      let best = '';
+
+      // Drop quality first, then dimensions — a slightly soft 260px
+      // thumbnail reads better than a crisp tiny one.
+      outer:
+      for (const px of PHOTO_SIZES) {
+        canvas.width = canvas.height = px;
+        ctx.imageSmoothingQuality = 'high';
+        ctx.drawImage(img, sx, sy, side, side, 0, 0, px, px);
+        for (const q of PHOTO_QUALS) {
+          best = canvas.toDataURL('image/jpeg', q).split(',')[1];
+          if (best.length <= PHOTO_BUDGET) break outer;
+        }
+      }
+
+      resolve(best.replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, ''));
+    };
+
+    img.onerror = () => { URL.revokeObjectURL(url); reject(new Error('unreadable image')); };
+    img.src = url;
+  });
+}
+
+/* ── confetti ─────────────────────────────────────────
+   A short burst on a win. Purely decorative — skipped
+   entirely when the viewer prefers reduced motion. */
+
+function confetti(canvas) {
+  if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+
+  const rect = canvas.getBoundingClientRect();
+  const dpr = Math.min(window.devicePixelRatio || 1, 2);
+  canvas.width  = rect.width  * dpr;
+  canvas.height = rect.height * dpr;
+
+  const ctx = canvas.getContext('2d');
+  ctx.scale(dpr, dpr);
+
+  const colours = ['#7fe3d8', '#ffd479', '#ff8f7a', '#f2f7f6', '#14746d'];
+  const bits = Array.from({ length: 70 }, () => ({
+    x: rect.width / 2 + (Math.random() - 0.5) * 60,
+    y: rect.height * 0.45,
+    vx: (Math.random() - 0.5) * 7,
+    vy: -Math.random() * 7 - 2.5,
+    w: 4 + Math.random() * 5,
+    h: 3 + Math.random() * 4,
+    rot: Math.random() * Math.PI,
+    spin: (Math.random() - 0.5) * 0.3,
+    c: colours[(Math.random() * colours.length) | 0],
+  }));
+
+  let frame = 0;
+  (function tick() {
+    ctx.clearRect(0, 0, rect.width, rect.height);
+    bits.forEach((b) => {
+      b.vy += 0.16;                 // gravity
+      b.x += b.vx; b.y += b.vy; b.rot += b.spin;
+      ctx.save();
+      ctx.translate(b.x, b.y);
+      ctx.rotate(b.rot);
+      ctx.globalAlpha = Math.max(0, 1 - frame / 110);
+      ctx.fillStyle = b.c;
+      ctx.fillRect(-b.w / 2, -b.h / 2, b.w, b.h);
+      ctx.restore();
+    });
+    if (++frame < 110) requestAnimationFrame(tick);
+    else ctx.clearRect(0, 0, rect.width, rect.height);
+  })();
+}
+
 /* ── create ──────────────────────────────────────────── */
 
 let chosenSex = '';
+let chosenPhoto = '';
 
 function initCreate() {
   const rating = $('f-rating');
   on(rating, 'input', () => { $('f-rating-out').textContent = rating.value; });
+
+  on($('f-photo'), 'change', async (e) => {
+    const file = e.target.files && e.target.files[0];
+    if (!file) return;
+    try {
+      chosenPhoto = await shrinkPhoto(file);
+      showPhoto(chosenPhoto);
+    } catch {
+      toast('Could not read that image');
+    }
+    e.target.value = '';   // so re-picking the same file still fires
+  });
+
+  on($('f-photo-clear'), 'click', () => { chosenPhoto = ''; showPhoto(''); });
 
   $('f-sex').querySelectorAll('.seg').forEach((btn) => {
     btn.setAttribute('aria-pressed', 'false');
@@ -234,7 +350,10 @@ function initCreate() {
 
     // location.origin is "null" on file:// — build from href instead.
     const base = location.href.split('#')[0];
-    const url = base + '#p=' + encode(puzzle);
+    const url = base + '#p=' + encode(puzzle)
+              + (chosenPhoto ? '&i=' + chosenPhoto : '');
+
+    $('share-long').classList.toggle('hidden', url.length < 12000);
     $('share-url').textContent = url;
     $('share-copy').dataset.url = url;
     saveMine({ name: puzzle.name, at: Date.now(), url });
@@ -242,11 +361,21 @@ function initCreate() {
   });
 }
 
+function showPhoto(b64) {
+  const img = $('f-photo-preview');
+  img.hidden = !b64;
+  if (b64) img.src = toDataUri(b64);
+  $('f-photo-empty').classList.toggle('hidden', !!b64);
+  $('f-photo-clear').classList.toggle('hidden', !b64);
+}
+
 function resetCreate() {
   $('create-form').reset();
   $('f-rating-out').textContent = '7';
   $('create-error').classList.add('hidden');
   chosenSex = '';
+  chosenPhoto = '';
+  showPhoto('');
   $('f-sex').querySelectorAll('.seg').forEach((b) => b.setAttribute('aria-pressed', 'false'));
 }
 
@@ -254,8 +383,13 @@ function resetCreate() {
 
 let game = null;
 
-function startGame(puzzle) {
-  game = { puzzle, revealed: new Set(), wrong: 0, over: false };
+// `preview` = you are trying out your own spot, so back always
+// returns you to your link rather than dumping you on the home screen.
+function startGame(puzzle, preview) {
+  game = { puzzle, revealed: new Set(), wrong: 0, over: false, preview: !!preview };
+
+  $('play-back').title = preview ? 'Back to your link' : 'Back';
+  $('result-toshare').classList.toggle('hidden', !preview);
 
   $('play-sub').textContent = puzzle.by
     ? `${puzzle.by} spotted them. Past or present Ashmole.`
@@ -377,6 +511,10 @@ function finish(won, note) {
     ? (score >= 70 ? 'Barely needed the clues.' : 'A win is a win.')
     : 'Better luck on the next spot.');
 
+  const photo = $('result-photo');
+  photo.classList.toggle('hidden', !game.puzzle.img);
+  if (game.puzzle.img) photo.src = toDataUri(game.puzzle.img);
+
   $('result-name').textContent = game.puzzle.name;
   $('result-by').textContent = game.puzzle.by ? `Spotted by ${game.puzzle.by}` : '';
   $('result-score').textContent = score;
@@ -409,6 +547,7 @@ function finish(won, note) {
     : `I gave up on Spotted. It was ${game.puzzle.name}.`;
 
   show('result');
+  if (won) requestAnimationFrame(() => confetti($('confetti')));
 }
 
 /* ── routing ─────────────────────────────────────────── */
@@ -419,6 +558,8 @@ function routeFromHash() {
   try {
     const puzzle = decode(m[1]);
     if (!puzzle || !puzzle.name || !puzzle.clues) throw new Error('bad payload');
+    const img = /[#&]i=([^&]+)/.exec(location.hash);
+    if (img) puzzle.img = img[1];
     startGame(puzzle);
     return true;
   } catch {
@@ -446,8 +587,13 @@ on($('result-create'), 'click', () => { resetCreate(); show('create'); });
 on($('share-copy'), 'click', (e) => copyText(e.currentTarget.dataset.url, 'Link copied'));
 
 on($('share-play'), 'click', () => {
-  const m = /#p=(.+)$/.exec($('share-copy').dataset.url || '');
-  if (m) startGame(decode(m[1]));
+  const url = $('share-copy').dataset.url || '';
+  const m = /[#&]p=([^&]+)/.exec(url);
+  if (!m) return;
+  const puzzle = decode(m[1]);
+  const img = /[#&]i=([^&]+)/.exec(url);
+  if (img) puzzle.img = img[1];
+  startGame(puzzle, true);
 });
 
 if (navigator.share) {
@@ -463,7 +609,10 @@ if (navigator.share) {
 }
 
 on($('play-guess'),  'click', submitGuess);
-on($('play-back'),   'click', goHome);
+on($('play-back'),   'click', () => {
+  if (game && game.preview) show('share'); else goHome();
+});
+on($('result-toshare'), 'click', () => show('share'));
 on($('play-input'),  'keydown', (e) => { if (e.key === 'Enter') submitGuess(); });
 on($('play-giveup'), 'click', () => {
   if (confirm('Give up and see who it was?')) finish(false);

@@ -73,6 +73,23 @@
           <input type="text" id="f-by" placeholder="Your name">
         </div>
 
+        <div class="field">
+          <label>Reveal photo <span class="opt">optional</span></label>
+          <div class="photo-row">
+            <div class="photo-slot" id="f-photo-slot">
+              <span id="f-photo-empty">No photo</span>
+              <img id="f-photo-preview" alt="" hidden>
+            </div>
+            <div class="photo-actions">
+              <label class="btn btn-ghost btn-small" for="f-photo">Choose photo</label>
+              <input type="file" id="f-photo" accept="image/*" hidden>
+              <button type="button" class="btn btn-quiet btn-small hidden" id="f-photo-clear">Remove</button>
+            </div>
+          </div>
+          <p class="hint">Shown only after they've guessed or given up. Shrunk to a
+            thumbnail so the link stays sendable.</p>
+        </div>
+
         <hr class="rule">
         <h3 class="section-h">The clues</h3>
 
@@ -156,6 +173,9 @@
       <p class="sub center">Send this link to the group. Don't open it in front of them.</p>
 
       <div class="linkbox"><code id="share-url"></code></div>
+      <p class="hint hidden" id="share-long">This link is long because it carries the
+        photo. Messaging apps handle it fine — but if anywhere rejects it, remove the
+        photo and make the link again.</p>
 
       <button class="btn btn-primary btn-block" id="share-copy">Copy link</button>
       <button class="btn btn-ghost btn-block hidden" id="share-native">Share…</button>
@@ -215,6 +235,8 @@
       <p class="sub center" id="result-sub"></p>
 
       <div class="answercard">
+        <canvas class="confetti" id="confetti" aria-hidden="true"></canvas>
+        <img class="answercard-photo hidden" id="result-photo" alt="">
         <span class="answercard-label">The person was</span>
         <span class="answercard-name" id="result-name"></span>
         <span class="answercard-by" id="result-by"></span>
@@ -228,6 +250,7 @@
       <ul class="breakdown" id="result-breakdown"></ul>
 
       <button class="btn btn-primary btn-block" id="result-share">Copy my score</button>
+      <button class="btn btn-ghost btn-block hidden" id="result-toshare">Back to your link</button>
       <button class="btn btn-ghost btn-block" id="result-create">Spot someone yourself</button>
     </div>
   </section>

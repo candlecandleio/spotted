@@ -221,6 +221,26 @@ select option { background: var(--bg-raised); color: var(--ink); }
   color: var(--accent);
 }
 
+/* ── photo picker ─────────────────────────────────────── */
+.photo-row { display: flex; align-items: center; gap: 15px; }
+.photo-slot {
+  width: 76px; height: 76px;
+  flex: none;
+  display: grid;
+  place-items: center;
+  background: var(--bg-raised);
+  border: 1.5px dashed var(--line);
+  border-radius: 14px;
+  overflow: hidden;
+  font-size: 12px;
+  color: var(--ink-faint);
+  text-align: center;
+}
+.photo-slot img { width: 100%; height: 100%; object-fit: cover; }
+.photo-actions { display: flex; flex-wrap: wrap; gap: 9px; }
+.btn-small { padding: 10px 17px; font-size: 14.5px; }
+label.btn { display: inline-block; }
+
 .rating-row { display: flex; align-items: center; gap: 14px; }
 input[type="range"] {
   flex: 1;
@@ -382,6 +402,8 @@ input[type="range"] {
 
 /* ── result ───────────────────────────────────────────── */
 .answercard {
+  position: relative;
+  overflow: hidden;
   background: var(--bg-raised);
   border: 1px solid var(--line);
   border-radius: var(--r-card);
@@ -392,6 +414,30 @@ input[type="range"] {
   flex-direction: column;
   gap: 6px;
 }
+.confetti {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  z-index: 2;
+}
+
+.answercard-photo {
+  width: 116px;
+  height: 116px;
+  object-fit: cover;
+  border-radius: 50%;
+  align-self: center;
+  margin-bottom: 10px;
+  border: 2.5px solid var(--accent);
+  animation: pop .45s cubic-bezier(.2, 1.5, .4, 1);
+}
+@keyframes pop {
+  from { transform: scale(.4); opacity: 0; }
+  to   { transform: scale(1);  opacity: 1; }
+}
+
 .answercard-label {
   font-size: 11.5px;
   text-transform: uppercase;

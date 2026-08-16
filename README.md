@@ -21,6 +21,22 @@ surname only both count, and small typos are forgiven (more slack on longer
 names). Near-misses get a "you're warm" nudge instead of a flat no. Creators can
 add extra accepted answers (nicknames) when setting up a spot.
 
+## The reveal photo
+
+Optional. The spotter can attach a photo, shown only once the game is over —
+alongside a confetti burst if they won.
+
+Because the puzzle lives in the URL, the photo has to be small. It gets
+centre-cropped square and stepped down through quality then dimensions until it
+fits ~11KB of base64, which is roughly a 260px thumbnail. A 270KB camera photo
+comes out around 5.4KB and pushes the link to about 5,700 characters — long, but
+well within what browsers and messaging apps handle. The share screen warns you
+if a link ever crosses 12,000.
+
+The photo rides in its own `&i=` fragment param rather than inside the JSON,
+because it is already base64 and nesting it would base64 it a second time for a
+free 33% of bloat.
+
 ## Running it
 
 Any static file server will do.
