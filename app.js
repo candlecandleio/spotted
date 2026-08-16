@@ -177,8 +177,8 @@ function renderMine() {
     const copy = document.createElement('button');
     copy.className = 'recent-copy';
     copy.type = 'button';
-    copy.textContent = 'Copy';
-    on(copy, 'click', () => copyText(entry.url, 'Link copied'));
+    copy.textContent = 'Share';
+    on(copy, 'click', () => share({ url: entry.url, okMsg: 'Link copied' }));
 
     const text = document.createElement('div');
     text.className = 'recent-text';
@@ -190,6 +190,22 @@ function renderMine() {
 }
 
 /* ── clipboard ───────────────────────────────────────── */
+
+/* Share sheet where the platform has one, clipboard everywhere else.
+   Must be called straight from a click — browsers refuse otherwise. */
+async function share({ text, url, okMsg }) {
+  if (navigator.share) {
+    try {
+      await navigator.share(text ? { text, url } : { url });
+      return;
+    } catch (e) {
+      // Dismissing the sheet is a normal outcome, not a failure.
+      if (e && e.name === 'AbortError') return;
+      // Anything else: fall through and copy instead.
+    }
+  }
+  copyText([text, url].filter(Boolean).join('\n'), okMsg);
+}
 
 async function copyText(text, okMsg) {
   try {
@@ -207,6 +223,153 @@ async function copyText(text, okMsg) {
   const ok = document.execCommand && document.execCommand('copy');
   ta.remove();
   toast(ok ? okMsg : 'Copy failed — select the link and copy it');
+}
+
+/* ── leaderboard ──────────────────────────────────────
+   No accounts. The browser mints a random id once and remembers your
+   display name, which is enough to tell friends apart on a board. */
+
+const PLAYER_KEY = 'spotted.player.v1';
+const NAME_KEY   = 'spotted.name.v1';
+
+function playerId() {
+  let id = '';
+  try { id = localStorage.getItem(PLAYER_KEY) || ''; } catch { /* private mode */ }
+  if (/^[A-Za-z0-9_-]{8,40}$/.test(id)) return id;
+
+  const bytes = crypto.getRandomValues(new Uint8Array(12));
+  id = btoa(String.fromCharCode(...bytes))
+    .replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+  try { localStorage.setItem(PLAYER_KEY, id); } catch { /* ok, board is per-device */ }
+  return id;
+}
+
+const savedName = () => { try { return localStorage.getItem(NAME_KEY) || ''; } catch { return ''; } };
+const rememberName = (n) => { try { localStorage.setItem(NAME_KEY, n); } catch { /* ok */ } };
+
+function renderBoard(board) {
+  const list = $('board-list');
+  const me = playerId();
+  list.innerHTML = '';
+
+  board.forEach((entry, i) => {
+    const li = document.createElement('li');
+    li.className = 'board-row' + (entry.player === me ? ' you' : '');
+
+    const rank = document.createElement('span');
+    rank.className = 'board-rank';
+    rank.textContent = i < 3 ? ['🥇', '🥈', '🥉'][i] : String(i + 1);
+
+    const who = document.createElement('div');
+    who.className = 'board-who';
+
+    const name = document.createElement('span');
+    name.className = 'board-name';
+    name.textContent = entry.name + (entry.player === me ? ' (you)' : '');
+
+    const detail = document.createElement('span');
+    detail.className = 'board-detail';
+    detail.textContent = entry.won
+      ? `${entry.clues} clue${entry.clues === 1 ? '' : 's'}, ${entry.wrong} wrong`
+      : 'Did not get it';
+
+    who.append(name, detail);
+
+    const score = document.createElement('span');
+    score.className = 'board-score';
+    score.textContent = entry.score;
+
+    li.append(rank, who, score);
+    list.append(li);
+  });
+}
+
+async function loadBoard(code) {
+  try {
+    const res = await fetch('/api/score?c=' + encodeURIComponent(code));
+    if (!res.ok) throw new Error('board ' + res.status);
+    const { board } = await res.json();
+    renderBoard(board || []);
+    return board || [];
+  } catch (e) {
+    console.warn('leaderboard unavailable:', e);
+    $('board-note').textContent = 'Leaderboard unavailable right now.';
+    $('board-note').classList.remove('hidden');
+    return null;
+  }
+}
+
+async function submitScore(code) {
+  const name = $('board-name').value.trim();
+  if (!name) { $('board-name').focus(); return; }
+  rememberName(name);
+
+  const btn = $('board-submit');
+  btn.disabled = true;
+  btn.textContent = 'Adding…';
+
+  try {
+    const res = await fetch('/api/score', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        code,
+        player: playerId(),
+        name,
+        won: game.won,
+        wrong: game.wrong,
+        clues: [...game.revealed],
+      }),
+    });
+    if (!res.ok) throw new Error('submit ' + res.status);
+
+    const { board, recorded } = await res.json();
+    $('board-join').classList.add('hidden');
+    $('board-note').textContent = recorded
+      ? 'Your score is on the board. Only your first go counts.'
+      : 'You were already on this board — your first score stands.';
+    $('board-note').classList.remove('hidden');
+    renderBoard(board || []);
+  } catch (e) {
+    console.warn('could not submit score:', e);
+    toast('Could not add your score');
+  }
+
+  btn.disabled = false;
+  btn.textContent = 'Add my score';
+}
+
+/* Shown only for short-link spots — an inline #p= link has no code to
+   group scores under. Previewing your own spot shows the board but no
+   way to join it. */
+async function setupBoard() {
+  const box = $('board');
+  const code = game.code;
+
+  if (!code) { box.classList.add('hidden'); return; }
+  box.classList.remove('hidden');
+
+  $('board-note').classList.add('hidden');
+  $('board-join').classList.toggle('hidden', game.preview);
+  $('board-name').value = savedName();
+
+  const board = await loadBoard(code);
+  if (!board) return;
+
+  if (game.preview) {
+    $('board-note').textContent = board.length
+      ? 'How your friends are doing.'
+      : 'Nobody has played this one yet.';
+    $('board-note').classList.remove('hidden');
+    return;
+  }
+
+  // Already played from this device? Then the form is pointless.
+  if (board.some((e) => e.player === playerId())) {
+    $('board-join').classList.add('hidden');
+    $('board-note').textContent = 'You are on this board — only your first go counts.';
+    $('board-note').classList.remove('hidden');
+  }
 }
 
 /* ── photo ────────────────────────────────────────────
@@ -544,8 +707,9 @@ let game = null;
 
 // `preview` = you are trying out your own spot, so back always
 // returns you to your link rather than dumping you on the home screen.
-function startGame(puzzle, preview) {
-  game = { puzzle, revealed: new Set(), wrong: 0, over: false, preview: !!preview };
+function startGame(puzzle, opts = {}) {
+  const { preview = false, code = '' } = opts;
+  game = { puzzle, revealed: new Set(), wrong: 0, over: false, won: false, preview, code };
 
   $('play-back').title = preview ? 'Back to your link' : 'Back';
   $('result-toshare').classList.toggle('hidden', !preview);
@@ -698,6 +862,7 @@ function submitGuess() {
 
 function finish(won, note) {
   game.over = true;
+  game.won = won;
   const score = won ? currentScore() : 0;
 
   $('result-emoji').textContent = won ? (score >= 70 ? '🏆' : '🎉') : '🫥';
@@ -746,13 +911,15 @@ function finish(won, note) {
   // In preview you are on the home screen, so use the link you just made.
   const link = game.preview ? ($('share-copy').dataset.url || '') : location.href;
 
+  $('result-share').dataset.url = link;
   $('result-share').dataset.text = won
     ? `Got it on Spotted — ${score} points, ${clues}, ${wrong}. `
-      + `Think you can beat that?\n${link}`
-    : `Spotted beat me — I ran out of guesses. Reckon you can get it?\n${link}`;
+      + 'Think you can beat that?'
+    : 'Spotted beat me — I ran out of guesses. Reckon you can get it?';
 
   show('result');
   if (won) requestAnimationFrame(() => confetti($('confetti')));
+  setupBoard();
 }
 
 /* ── routing ─────────────────────────────────────────── */
@@ -775,8 +942,7 @@ async function routeFromPath() {
     const { puzzle } = await res.json();
     if (!puzzle || !puzzle.name || !puzzle.clues) throw new Error('bad payload');
 
-    lastCode = code;
-    startGame(puzzle);
+    startGame(puzzle, { code });
     return true;
   } catch (e) {
     console.warn('could not load spot:', e);
@@ -787,8 +953,6 @@ async function routeFromPath() {
     return true;   // handled — do not fall through to the home screen
   }
 }
-
-let lastCode = '';
 
 function routeFromHash() {
   const m = /[#&]p=([^&]+)/.exec(location.hash);
@@ -879,7 +1043,7 @@ on($('share-back'),    'click', () => show('create'));
 on($('share-home'),    'click', goHome);
 on($('result-create'), 'click', () => { resetCreate(); show('create'); });
 
-on($('share-copy'), 'click', (e) => copyText(e.currentTarget.dataset.url, 'Link copied'));
+on($('share-copy'), 'click', (e) => share({ url: e.currentTarget.dataset.url, okMsg: 'Link copied' }));
 
 on($('share-play'), 'click', async () => {
   const url = $('share-copy').dataset.url || '';
@@ -890,7 +1054,7 @@ on($('share-play'), 'click', async () => {
     const puzzle = decode(m[1]);
     const img = /[#&]i=([^&]+)/.exec(url);
     if (img) puzzle.img = img[1];
-    startGame(puzzle, true);
+    startGame(puzzle, { preview: true });
     return;
   }
 
@@ -900,23 +1064,11 @@ on($('share-play'), 'click', async () => {
   try {
     const res = await fetch('/api/spot?c=' + encodeURIComponent(code));
     const { puzzle } = await res.json();
-    startGame(puzzle, true);
+    startGame(puzzle, { preview: true, code });
   } catch {
     toast('Could not load the preview');
   }
 });
-
-if (navigator.share) {
-  const nb = $('share-native');
-  nb.classList.remove('hidden');
-  on(nb, 'click', () => {
-    navigator.share({
-      title: 'Spotted',
-      text: 'Guess who I saw out and about',
-      url: $('share-copy').dataset.url,
-    }).catch(() => { /* user dismissed the sheet */ });
-  });
-}
 
 on($('play-guess'),  'click', submitGuess);
 on($('play-back'),   'click', () => {
@@ -928,11 +1080,16 @@ on($('play-giveup'), 'click', () => {
   if (confirm('Give up and see who it was?')) finish(false);
 });
 
-on($('result-share'), 'click', (e) => copyText(e.currentTarget.dataset.text, 'Score copied'));
+on($('result-share'), 'click', (e) => share({
+  text: e.currentTarget.dataset.text,
+  url: e.currentTarget.dataset.url,
+  okMsg: 'Score copied',
+}));
 
 window.addEventListener('hashchange', () => { if (!routeFromHash()) goHome(); });
 
 on($('loading-home'), 'click', goHome);
+on($('board-join'), 'submit', (e) => { e.preventDefault(); submitScore(game.code); });
 
 /* Three ways in: a short link (/abcde), an old self-contained link
    (#p=...), or the app itself. */

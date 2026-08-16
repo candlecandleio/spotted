@@ -526,6 +526,74 @@ input[type="range"] {
 .breakdown .bd-total { font-weight: 700; }
 .breakdown .bd-total .bd-cost { color: var(--accent); }
 
+/* ── leaderboard ──────────────────────────────────────── */
+.board { margin: 4px 0 26px; }
+
+.board-join { display: flex; gap: 9px; margin-bottom: 14px; }
+.board-join input[type="text"] { flex: 1; padding: 12px 14px; }
+.board-join .btn { flex: none; white-space: nowrap; }
+
+.board-note {
+  margin: 0 0 12px;
+  font-size: 13.5px;
+  color: var(--ink-faint);
+}
+
+.board-list { list-style: none; margin: 0; padding: 0; }
+
+.board-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 11px 13px;
+  border-radius: 10px;
+  font-size: 15px;
+  background: var(--bg-raised);
+  border: 1px solid transparent;
+  margin-bottom: 7px;
+}
+.board-row.you {
+  border-color: var(--accent);
+  background: var(--accent-deep);
+}
+
+.board-rank {
+  flex: none;
+  width: 26px;
+  font-variant-numeric: tabular-nums;
+  font-weight: 700;
+  color: var(--ink-faint);
+  text-align: center;
+}
+.board-row:nth-child(1) .board-rank { color: #ffd479; }
+.board-row:nth-child(2) .board-rank { color: #d8dee0; }
+.board-row:nth-child(3) .board-rank { color: #d0a172; }
+
+.board-who {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+.board-name {
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.board-detail { font-size: 12.5px; color: var(--ink-faint); }
+
+.board-score {
+  flex: none;
+  font-family: var(--serif);
+  font-size: 20px;
+  font-weight: 700;
+  color: var(--accent);
+  font-variant-numeric: tabular-nums;
+}
+.board-row.you .board-score { color: var(--accent); }
+
 /* ── recent / howto ───────────────────────────────────── */
 .recent { margin-top: 30px; }
 .recent-title {
