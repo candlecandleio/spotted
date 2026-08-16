@@ -26,16 +26,14 @@ add extra accepted answers (nicknames) when setting up a spot.
 Optional. The spotter can attach a photo, shown only once the game is over —
 alongside a confetti burst if they won.
 
-Because the puzzle lives in the URL, the photo has to be small. It gets
-centre-cropped square and stepped down through quality then dimensions until it
-fits ~11KB of base64, which is roughly a 260px thumbnail. A 270KB camera photo
-comes out around 5.4KB and pushes the link to about 5,700 characters — long, but
-well within what browsers and messaging apps handle. The share screen warns you
-if a link ever crosses 12,000.
+Choosing a photo opens a circular cropper you drag to reposition, with a zoom
+slider. Zoom scales about the centre of the circle, and dragging is clamped so
+the image always covers the frame. The export reads the same crop state as the
+preview, so what you framed is exactly what gets sent.
 
-The photo rides in its own `&i=` fragment param rather than inside the JSON,
-because it is already base64 and nesting it would base64 it a second time for a
-free 33% of bloat.
+Photos are stored alongside the puzzle rather than in the link, so they can be
+reasonably sharp: 420px at q0.82. The long fallback link uses a much tighter
+budget (260px, ~11KB of base64) because there it has to fit in the URL.
 
 ## Running it
 
@@ -51,27 +49,25 @@ also works in a normal browser.
 To put it online, drop the three files on any static host (GitHub Pages, Netlify,
 Cloudflare Pages). There is nothing to configure.
 
-## How sharing works — and its one limitation
+## How sharing works
 
-There is no server and no database. The whole puzzle is packed into the part of
-the URL after the `#`, which browsers never send to the host. So the link *is*
-the game: no accounts, no hosting bill, and nothing to keep running.
+Creating a spot POSTs it to `/api/spot`, which stores it in Vercel Blob under a
+five-character code and hands the code back. The link is just that code:
 
-The tradeoff: the answer travels inside the link. It is XOR-scrambled and
-base64'd so it isn't readable at a glance in the address bar, but that is
-obfuscation, not security — anyone who wants to decode it can. Fine for a game
-among friends; don't put anything sensitive in the clues.
+    https://spotted.bingo/w65v8
 
-Two consequences worth knowing:
+Opening it rewrites to the app, which fetches the puzzle by code. Codes use an
+alphabet with no `0`, `1`, `o`, `i` or `l`, so they survive being read aloud.
 
-- **No shared leaderboard.** Each player sees their own score. Copy-your-score
-  gives them a line to paste back into the chat.
-- **Links are long** (a few hundred characters). Every messaging app handles
-  this fine; some link previews will truncate the display, but the link still
-  works.
+The answer is no longer in the link, so it can no longer be decoded out of one —
+which was true of the original design and is the main reason this was worth
+building. The API validates and rebuilds every stored puzzle field by field, so
+nothing unexpected can be written and later served into another player's browser.
 
-If you later want a real leaderboard, that is the point where a small backend
-becomes worth it.
+**Older `#p=...` links still work.** They carried the whole puzzle inline, and
+that path is still handled on load. It also serves as the fallback: if the API
+is ever unreachable, the client generates one of those long links instead, so
+nobody is ever blocked from creating a spot.
 
 ## Files
 
